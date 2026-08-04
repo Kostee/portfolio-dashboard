@@ -15,7 +15,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
 
-        setAll(cookiesToSet, headers) {
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
@@ -27,18 +27,26 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, options);
           });
-
-          Object.entries(headers).forEach(([key, value]) => {
-            supabaseResponse.headers.set(key, value);
-          });
         },
       },
     },
   );
 
-  // Validates or refreshes the current authentication token.
-  // Route protection will be added together with the login page.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+
+  const pathname = request.nextUrl.pathname;
+
+  const isPortfolioRoute = pathname.startsWith("/portfolio");
+  const isLoginRoute = pathname === "/portfolio/login";
+
+  if (isPortfolioRoute && !isLoginRoute && !data?.claims) {
+    const loginUrl = request.nextUrl.clone();
+
+    loginUrl.pathname = "/portfolio/login";
+    loginUrl.searchParams.set("next", pathname);
+
+    return NextResponse.redirect(loginUrl);
+  }
 
   return supabaseResponse;
 }

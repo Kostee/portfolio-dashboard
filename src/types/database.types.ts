@@ -169,6 +169,106 @@ export type Database = {
           },
         ]
       }
+      exchange_rates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_currency: string
+          id: string
+          notes: string | null
+          rate: number
+          rate_date: string
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          to_currency: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_currency: string
+          id?: string
+          notes?: string | null
+          rate: number
+          rate_date: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          to_currency: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_currency?: string
+          id?: string
+          notes?: string | null
+          rate?: number
+          rate_date?: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          to_currency?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exchange_rates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instrument_prices: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          currency: string
+          id: string
+          instrument_id: string
+          notes: string | null
+          price: number
+          price_date: string
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          id?: string
+          instrument_id: string
+          notes?: string | null
+          price: number
+          price_date: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          instrument_id?: string
+          notes?: string | null
+          price?: number
+          price_date?: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instrument_prices_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       instruments: {
         Row: {
           asset_class_id: string
@@ -273,6 +373,222 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_operation_entries: {
+        Row: {
+          account_id: string
+          base_cash_delta: number | null
+          base_value_delta: number | null
+          cash_delta: number
+          component: Database["public"]["Enums"]["portfolio_operation_component"]
+          created_at: string
+          created_by: string | null
+          currency: string
+          fx_rate_to_base: number | null
+          id: string
+          instrument_id: string | null
+          memo: string | null
+          operation_id: string
+          quantity_delta: number
+          sequence_no: number
+          unit_price: number | null
+          updated_at: string
+          value_delta: number
+          workspace_id: string
+        }
+        Insert: {
+          account_id: string
+          base_cash_delta?: number | null
+          base_value_delta?: number | null
+          cash_delta?: number
+          component?: Database["public"]["Enums"]["portfolio_operation_component"]
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          fx_rate_to_base?: number | null
+          id?: string
+          instrument_id?: string | null
+          memo?: string | null
+          operation_id: string
+          quantity_delta?: number
+          sequence_no?: number
+          unit_price?: number | null
+          updated_at?: string
+          value_delta?: number
+          workspace_id: string
+        }
+        Update: {
+          account_id?: string
+          base_cash_delta?: number | null
+          base_value_delta?: number | null
+          cash_delta?: number
+          component?: Database["public"]["Enums"]["portfolio_operation_component"]
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          fx_rate_to_base?: number | null
+          id?: string
+          instrument_id?: string | null
+          memo?: string | null
+          operation_id?: string
+          quantity_delta?: number
+          sequence_no?: number
+          unit_price?: number | null
+          updated_at?: string
+          value_delta?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_operation_workspace_fk"
+            columns: ["workspace_id", "operation_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_operations"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_operations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          executed_at: string | null
+          external_reference: string | null
+          id: string
+          notes: string | null
+          operation_date: string
+          operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          status: Database["public"]["Enums"]["portfolio_operation_status"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          executed_at?: string | null
+          external_reference?: string | null
+          id?: string
+          notes?: string | null
+          operation_date: string
+          operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          status?: Database["public"]["Enums"]["portfolio_operation_status"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          executed_at?: string | null
+          external_reference?: string | null
+          id?: string
+          notes?: string | null
+          operation_date?: string
+          operation_type?: Database["public"]["Enums"]["portfolio_operation_type"]
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          status?: Database["public"]["Enums"]["portfolio_operation_status"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      position_snapshots: {
+        Row: {
+          account_id: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          fx_rate_to_base: number | null
+          id: string
+          instrument_id: string
+          market_value: number
+          market_value_base: number | null
+          notes: string | null
+          quantity: number | null
+          snapshot_date: string
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          unit_price: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          fx_rate_to_base?: number | null
+          id?: string
+          instrument_id: string
+          market_value: number
+          market_value_base?: number | null
+          notes?: string | null
+          quantity?: number | null
+          snapshot_date: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          unit_price?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          fx_rate_to_base?: number | null
+          id?: string
+          instrument_id?: string
+          market_value?: number
+          market_value_base?: number | null
+          notes?: string | null
+          quantity?: number | null
+          snapshot_date?: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          unit_price?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "position_snapshots_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
           },
         ]
       }
@@ -411,6 +727,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_cash_operation: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_currency: string
+          p_description?: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+        }
+        Returns: string
+      }
       create_workspace: {
         Args: {
           p_base_currency?: string
@@ -441,6 +769,35 @@ export type Database = {
         | "ppk_fund"
         | "other"
       instrument_tracking_mode: "units" | "balance"
+      portfolio_data_source:
+        | "manual"
+        | "import"
+        | "market_data"
+        | "broker_sync"
+        | "system"
+      portfolio_operation_component:
+        | "principal"
+        | "fee"
+        | "tax"
+        | "income"
+        | "transfer"
+        | "adjustment"
+      portfolio_operation_status: "draft" | "posted" | "voided"
+      portfolio_operation_type:
+        | "opening_position"
+        | "deposit"
+        | "withdrawal"
+        | "internal_transfer"
+        | "currency_exchange"
+        | "buy"
+        | "sell"
+        | "dividend"
+        | "interest"
+        | "fee"
+        | "tax"
+        | "balance_adjustment"
+        | "quantity_adjustment"
+        | "other"
       provider_type:
         | "brokerage"
         | "bank"
@@ -596,6 +953,38 @@ export const Constants = {
         "other",
       ],
       instrument_tracking_mode: ["units", "balance"],
+      portfolio_data_source: [
+        "manual",
+        "import",
+        "market_data",
+        "broker_sync",
+        "system",
+      ],
+      portfolio_operation_component: [
+        "principal",
+        "fee",
+        "tax",
+        "income",
+        "transfer",
+        "adjustment",
+      ],
+      portfolio_operation_status: ["draft", "posted", "voided"],
+      portfolio_operation_type: [
+        "opening_position",
+        "deposit",
+        "withdrawal",
+        "internal_transfer",
+        "currency_exchange",
+        "buy",
+        "sell",
+        "dividend",
+        "interest",
+        "fee",
+        "tax",
+        "balance_adjustment",
+        "quantity_adjustment",
+        "other",
+      ],
       provider_type: [
         "brokerage",
         "bank",

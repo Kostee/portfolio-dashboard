@@ -209,25 +209,51 @@ export default async function PortfolioPage({
                 Portfolio configuration
               </p>
 
-              <Link
-                href="/portfolio/owners"
-                className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <div>
-                  <p className="font-medium text-slate-900">Portfolio owners</p>
-
-                  <p className="mt-1 text-sm text-slate-600">
-                    Manage the people to whom accounts and assets belong.
-                  </p>
-                </div>
-
-                <span
-                  aria-hidden="true"
-                  className="text-xl text-slate-400"
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Link
+                  href="/portfolio/owners"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
                 >
-                  →
-                </span>
-              </Link>
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Portfolio owners
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Manage the people to whom accounts and assets belong.
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-slate-400"
+                  >
+                    →
+                  </span>
+                </Link>
+
+                <Link
+                  href="/portfolio/providers"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Providers
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Manage brokers, banks and investment platforms.
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-slate-400"
+                  >
+                    →
+                  </span>
+                </Link>
+              </div>
             </div>
           </section>
         )}

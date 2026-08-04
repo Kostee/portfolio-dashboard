@@ -297,6 +297,28 @@ export default async function PortfolioPage({
                     →
                   </span>
                 </Link>
+
+                <Link
+                  href="/portfolio/instruments"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Instruments
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Manage traded assets, identifiers and valuation methods.
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-slate-400"
+                  >
+                    →
+                  </span>
+                </Link>
               </div>
             </div>
           </section>

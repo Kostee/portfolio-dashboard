@@ -204,6 +204,7 @@ export default async function PortfolioPage({
                 <dd className="mt-1 font-medium">{workspace.timezone}</dd>
               </div>
             </dl>
+
             <div className="mt-6 border-t border-slate-200 pt-6">
               <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">
                 Portfolio configuration
@@ -321,6 +322,38 @@ export default async function PortfolioPage({
                 </Link>
               </div>
             </div>
+
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">
+                Portfolio data
+              </p>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Link
+                  href="/portfolio/operations"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Operations
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Record deposits, withdrawals, trades and other
+                      portfolio events.
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-slate-400"
+                  >
+                    →
+                  </span>
+                </Link>
+              </div>
+            </div>
+
           </section>
         )}
       </div>

@@ -80,10 +80,13 @@ export type Database = {
       }
       asset_classes: {
         Row: {
+          code: string
           color_hex: string
           created_at: string
           created_by: string | null
           id: string
+          include_in_allocation_chart: boolean
+          include_in_xirr: boolean
           is_active: boolean
           name: string
           sort_order: number
@@ -91,10 +94,13 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          code: string
           color_hex: string
           created_at?: string
           created_by?: string | null
           id?: string
+          include_in_allocation_chart?: boolean
+          include_in_xirr?: boolean
           is_active?: boolean
           name: string
           sort_order?: number
@@ -102,10 +108,13 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          code?: string
           color_hex?: string
           created_at?: string
           created_by?: string | null
           id?: string
+          include_in_allocation_chart?: boolean
+          include_in_xirr?: boolean
           is_active?: boolean
           name?: string
           sort_order?: number

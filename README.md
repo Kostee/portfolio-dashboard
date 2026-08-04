@@ -1,36 +1,120 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Portfolio Dashboard
 
-## Getting Started
+A private, self-hostable investment portfolio tracking and reporting dashboard.
 
-First, run the development server:
+The application is designed for manually maintained portfolios and focuses on:
+
+- transaction history,
+- current holdings calculated from initial positions and transactions,
+- manual valuation updates,
+- weekly trading reports,
+- monthly portfolio visualizations,
+- dividend summaries,
+- XIRR calculation,
+- JSON backup and restore.
+
+## Project goals
+
+Portfolio Dashboard is intended to be:
+
+- private by default,
+- accessible from desktop and mobile browsers,
+- self-hostable,
+- independent from broker integrations,
+- transparent in how portfolio values and performance metrics are calculated.
+
+The public repository contains application code, database migrations, documentation and demonstration data only.
+
+Real portfolio data, account holders, credentials, backups and production configuration are not stored in this repository.
+
+## Planned stack
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Supabase PostgreSQL
+- Supabase Authentication
+- Vercel or another compatible hosting platform
+
+## Core data principle
+
+Current holdings are calculated using:
+
+```text
+initial holdings + transactions = current quantities
+current quantities × latest valuation updates = current portfolio value
+````
+
+Historical portfolio value points are stored separately for periods preceding the detailed transaction history.
+
+## Planned reports
+
+### Weekly
+
+* Added and sold instruments
+* New assets by asset class
+
+### Monthly
+
+* Polish stocks portfolio structure
+* International portfolio structure
+* Assets by account
+* Assets over time
+* Asset class structure
+
+### Performance
+
+* Portfolio XIRR
+* Nominal portfolio result
+* Dividend summaries by month, year, instrument and account
+
+## Privacy
+
+The application is designed for private deployments.
+
+Do not commit:
+
+* production environment variables,
+* real portfolio exports,
+* private seed files,
+* backups,
+* authentication secrets,
+* personal account or transaction data.
+
+See `.gitignore` and `.env.example` before deploying.
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run linting:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a production build:
 
-## Learn More
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Status
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Early development.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The current stage focuses on defining the domain model, reporting rules and privacy boundaries before implementing persistence and user-facing features.
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT

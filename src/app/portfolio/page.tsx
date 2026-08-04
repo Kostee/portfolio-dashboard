@@ -253,6 +253,28 @@ export default async function PortfolioPage({
                     →
                   </span>
                 </Link>
+
+                <Link
+                  href="/portfolio/asset-classes"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Asset classes
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      Manage allocation groups, colors and XIRR inclusion.
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-slate-400"
+                  >
+                    →
+                  </span>
+                </Link>
               </div>
             </div>
           </section>

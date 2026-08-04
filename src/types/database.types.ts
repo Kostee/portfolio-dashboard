@@ -177,9 +177,12 @@ export type Database = {
           default_currency: string
           exchange: string | null
           id: string
+          instrument_kind: Database["public"]["Enums"]["instrument_kind"]
           is_active: boolean
+          isin: string | null
           name: string
           ticker: string | null
+          tracking_mode: Database["public"]["Enums"]["instrument_tracking_mode"]
           updated_at: string
           workspace_id: string
         }
@@ -190,9 +193,12 @@ export type Database = {
           default_currency: string
           exchange?: string | null
           id?: string
+          instrument_kind?: Database["public"]["Enums"]["instrument_kind"]
           is_active?: boolean
+          isin?: string | null
           name: string
           ticker?: string | null
+          tracking_mode?: Database["public"]["Enums"]["instrument_tracking_mode"]
           updated_at?: string
           workspace_id: string
         }
@@ -203,9 +209,12 @@ export type Database = {
           default_currency?: string
           exchange?: string | null
           id?: string
+          instrument_kind?: Database["public"]["Enums"]["instrument_kind"]
           is_active?: boolean
+          isin?: string | null
           name?: string
           ticker?: string | null
+          tracking_mode?: Database["public"]["Enums"]["instrument_tracking_mode"]
           updated_at?: string
           workspace_id?: string
         }
@@ -423,6 +432,15 @@ export type Database = {
         | "bonds"
         | "crypto"
         | "other"
+      instrument_kind:
+        | "stock"
+        | "etf"
+        | "reit"
+        | "crypto"
+        | "government_bond"
+        | "ppk_fund"
+        | "other"
+      instrument_tracking_mode: "units" | "balance"
       provider_type:
         | "brokerage"
         | "bank"
@@ -568,6 +586,16 @@ export const Constants = {
         "crypto",
         "other",
       ],
+      instrument_kind: [
+        "stock",
+        "etf",
+        "reit",
+        "crypto",
+        "government_bond",
+        "ppk_fund",
+        "other",
+      ],
+      instrument_tracking_mode: ["units", "balance"],
       provider_type: [
         "brokerage",
         "bank",

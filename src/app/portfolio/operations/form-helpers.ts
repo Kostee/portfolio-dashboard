@@ -66,3 +66,9 @@ export function getDateInTimeZone(
 
   return `${year}-${month}-${day}`;
 }
+
+export function isValidOperationTime(
+  value: string,
+): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}

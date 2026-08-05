@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import {
   isValidIsoDate,
+  isValidOperationTime,
   parsePositiveNumber,
   readText,
 } from "../form-helpers";
@@ -17,7 +18,8 @@ export async function createInternalTransfer(
 ) {
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const { data: claimsData } =
+    await supabase.auth.getClaims();
 
   if (!claimsData?.claims) {
     redirect("/portfolio/login");
@@ -38,7 +40,15 @@ export async function createInternalTransfer(
     "operationDate",
   );
 
-  const rawAmount = readText(formData, "amount");
+  const operationTime = readText(
+    formData,
+    "operationTime",
+  );
+
+  const rawAmount = readText(
+    formData,
+    "amount",
+  );
 
   const currency = readText(
     formData,
@@ -67,6 +77,15 @@ export async function createInternalTransfer(
   if (!isValidIsoDate(operationDate)) {
     redirect(
       "/portfolio/operations/internal-transfer?error=date_required",
+    );
+  }
+
+  if (
+    operationTime &&
+    !isValidOperationTime(operationTime)
+  ) {
+    redirect(
+      "/portfolio/operations/internal-transfer?error=time_invalid",
     );
   }
 
@@ -114,11 +133,17 @@ export async function createInternalTransfer(
     await supabase
       .from("accounts")
       .select("id, base_currency")
-      .eq("workspace_id", membership.workspace_id)
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
       .eq("is_active", true)
       .in("id", [fromAccountId, toAccountId]);
 
-  if (accountsError || accounts?.length !== 2) {
+  if (
+    accountsError ||
+    accounts?.length !== 2
+  ) {
     console.error(
       "Transfer account validation failed:",
       accountsError,
@@ -130,7 +155,8 @@ export async function createInternalTransfer(
   }
 
   const currencyMismatch = accounts.some(
-    (account) => account.base_currency !== currency,
+    (account) =>
+      account.base_currency !== currency,
   );
 
   if (currencyMismatch) {
@@ -145,9 +171,12 @@ export async function createInternalTransfer(
       p_from_account_id: fromAccountId,
       p_to_account_id: toAccountId,
       p_operation_date: operationDate,
+      p_operation_time:
+        operationTime || undefined,
       p_amount: amount,
       p_currency: currency,
-      p_description: description || undefined,
+      p_description:
+        description || undefined,
     },
   );
 

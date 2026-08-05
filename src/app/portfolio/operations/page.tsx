@@ -12,6 +12,8 @@ import {
   OPERATION_TYPE_LABELS,
 } from "./operation-options";
 
+import { getDateInTimeZone } from "./form-helpers";
+
 type OperationsPageProps = {
   searchParams: Promise<{
     error?: string;
@@ -21,7 +23,9 @@ type OperationsPageProps = {
 
 type OperationEntrySummary = Pick<
   Database["public"]["Tables"]["portfolio_operation_entries"]["Row"],
+  | "id"
   | "operation_id"
+  | "sequence_no"
   | "account_id"
   | "cash_delta"
   | "currency"
@@ -76,7 +80,7 @@ export default async function OperationsPage({
   ] = await Promise.all([
     supabase
       .from("workspaces")
-      .select("name")
+      .select("name, timezone")
       .eq("id", membership.workspace_id)
       .single(),
 
@@ -160,9 +164,11 @@ export default async function OperationsPage({
     const { data, error } = await supabase
       .from("portfolio_operation_entries")
       .select(
-        "operation_id, account_id, cash_delta, currency, component",
-      )
-      .in("operation_id", operationIds);
+        "id, operation_id, sequence_no, account_id, cash_delta, currency, component",
+    )
+    .in("operation_id", operationIds)
+    .order("operation_id", { ascending: true })
+    .order("sequence_no", { ascending: true });
 
     if (error) {
       console.error(
@@ -206,18 +212,27 @@ export default async function OperationsPage({
       return first.name.localeCompare(second.name);
     });
 
-  const entryByOperation = new Map(
-    operationEntries.map((entry) => [
-      entry.operation_id,
-      entry,
-    ]),
-  );
+  const entriesByOperation = new Map<
+    string,
+    OperationEntrySummary[]
+  >();
+
+  for (const entry of operationEntries) {
+    const entries =
+      entriesByOperation.get(entry.operation_id) ?? [];
+
+    entries.push(entry);
+
+    entriesByOperation.set(entry.operation_id, entries);
+  }
 
   const canEdit =
     membership.role === "admin" ||
     membership.role === "editor";
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getDateInTimeZone(
+    workspace?.timezone ?? "Europe/Warsaw",
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-900 sm:px-8">
@@ -244,7 +259,32 @@ export default async function OperationsPage({
           </p>
         </header>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <nav className="mt-8 grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/portfolio/operations/internal-transfer"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">Internal transfer</p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Move cash between accounts using the same currency.
+            </p>
+          </Link>
+
+          <Link
+            href="/portfolio/operations/currency-exchange"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">Currency exchange</p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Record outgoing and incoming amounts in different
+              currencies.
+            </p>
+          </Link>
+        </nav>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -266,32 +306,8 @@ export default async function OperationsPage({
             {operations.length > 0 ? (
               <ul className="mt-6 divide-y divide-slate-200">
                 {operations.map((operation) => {
-                  const entry = entryByOperation.get(
-                    operation.id,
-                  );
-                  const account = entry
-                    ? accountMap.get(entry.account_id)
-                    : undefined;
-                  const owner = account
-                    ? ownerMap.get(account.owner_id)
-                    : undefined;
-                  const provider = account
-                    ? providerMap.get(account.provider_id)
-                    : undefined;
-
-                  const cashDelta = entry
-                    ? Number(entry.cash_delta)
-                    : 0;
-
-                  const accountDescription = account
-                    ? [
-                        owner?.display_name,
-                        provider?.name,
-                        account.name,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : "No account entry";
+                  const entries =
+                    entriesByOperation.get(operation.id) ?? [];
 
                   return (
                     <li
@@ -300,50 +316,78 @@ export default async function OperationsPage({
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="font-medium">
-                            {
-                              OPERATION_TYPE_LABELS[
-                                operation.operation_type
-                              ]
-                            }
-                          </p>
+                            <p className="font-medium">
+                            {OPERATION_TYPE_LABELS[operation.operation_type]}
+                            </p>
 
-                          <p className="mt-1 text-sm text-slate-600">
-                            {accountDescription}
-                          </p>
-
-                          <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-xs text-slate-500">
                             {operation.operation_date}
                             {operation.description
-                              ? ` · ${operation.description}`
-                              : ""}
-                          </p>
+                                ? ` · ${operation.description}`
+                                : ""}
+                            </p>
                         </div>
 
                         <div className="flex flex-wrap gap-2 sm:justify-end">
-                          {entry && (
-                            <span
-                              className={
-                                cashDelta >= 0
-                                  ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-                                  : "rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
-                              }
-                            >
-                              {cashDelta >= 0 ? "+" : ""}
-                              {formatAmount(cashDelta)}{" "}
-                              {entry.currency}
-                            </span>
-                          )}
-
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                             {operation.status}
-                          </span>
+                            </span>
 
-                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
                             {operation.source}
-                          </span>
+                            </span>
                         </div>
-                      </div>
+                        </div>
+
+                        {entries.length > 0 && (
+                        <ul className="mt-4 space-y-2">
+                            {entries.map((entry) => {
+                            const account = accountMap.get(entry.account_id);
+
+                            const owner = account
+                                ? ownerMap.get(account.owner_id)
+                                : undefined;
+
+                            const provider = account
+                                ? providerMap.get(account.provider_id)
+                                : undefined;
+
+                            const cashDelta = Number(entry.cash_delta);
+
+                            const accountDescription = account
+                                ? [
+                                    owner?.display_name,
+                                    provider?.name,
+                                    account.name,
+                                ]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                                : "Unknown account";
+
+                            return (
+                                <li
+                                key={entry.id}
+                                className="flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                <p className="text-sm text-slate-600">
+                                    {accountDescription}
+                                </p>
+
+                                <span
+                                    className={
+                                    cashDelta >= 0
+                                        ? "w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                                        : "w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
+                                    }
+                                >
+                                    {cashDelta >= 0 ? "+" : ""}
+                                    {formatAmount(cashDelta)} {entry.currency}
+                                </span>
+                                </li>
+                            );
+                            })}
+                        </ul>
+                        )}
                     </li>
                   );
                 })}

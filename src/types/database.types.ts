@@ -739,6 +739,33 @@ export type Database = {
         }
         Returns: string
       }
+      create_currency_exchange: {
+        Args: {
+          p_base_value?: number
+          p_description?: string
+          p_from_account_id: string
+          p_from_amount: number
+          p_from_currency: string
+          p_notes?: string
+          p_operation_date: string
+          p_to_account_id: string
+          p_to_amount: number
+          p_to_currency: string
+        }
+        Returns: string
+      }
+      create_internal_transfer: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_description?: string
+          p_from_account_id: string
+          p_notes?: string
+          p_operation_date: string
+          p_to_account_id: string
+        }
+        Returns: string
+      }
       create_workspace: {
         Args: {
           p_base_currency?: string

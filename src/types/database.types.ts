@@ -827,6 +827,24 @@ export type Database = {
         }
         Returns: string
       }
+      create_trade_operation: {
+        Args: {
+          p_account_id: string
+          p_actual_cash_amount: number
+          p_base_value?: number
+          p_cash_currency: string
+          p_description?: string
+          p_fee_amount?: number
+          p_instrument_id: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_time?: string
+          p_operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+          p_quantity: number
+          p_tax_amount?: number
+        }
+        Returns: string
+      }
       create_workspace: {
         Args: {
           p_base_currency?: string

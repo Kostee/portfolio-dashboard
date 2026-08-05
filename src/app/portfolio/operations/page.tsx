@@ -26,6 +26,8 @@ type OperationEntrySummary = Pick<
   | "operation_id"
   | "sequence_no"
   | "account_id"
+  | "instrument_id"
+  | "quantity_delta"
   | "cash_delta"
   | "currency"
   | "component"
@@ -35,6 +37,13 @@ function formatAmount(value: number): string {
   return new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatQuantity(value: number): string {
+  return new Intl.NumberFormat("en-GB", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 8,
   }).format(value);
 }
 
@@ -93,6 +102,7 @@ export default async function OperationsPage({
     ownersResult,
     providersResult,
     accountsResult,
+    instrumentsResult,
     operationsResult,
   ] = await Promise.all([
     supabase
@@ -133,6 +143,14 @@ export default async function OperationsPage({
       ),
 
     supabase
+      .from("instruments")
+      .select("id, name, ticker")
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
+
+    supabase
       .from("portfolio_operations")
       .select(
         "id, operation_date, executed_at, operation_type, status, source, description, created_at",
@@ -144,16 +162,25 @@ export default async function OperationsPage({
       .order("operation_date", {
         ascending: false,
       })
+      .order("executed_at", {
+        ascending: false,
+        nullsFirst: false,
+      })
       .order("created_at", {
         ascending: false,
       })
-      .limit(50),
+      .order("id", {
+        ascending: false,
+      })
+      .limit(50)
   ]);
 
   const workspace = workspaceResult.data;
   const owners = ownersResult.data ?? [];
   const providers = providersResult.data ?? [];
   const accounts = accountsResult.data ?? [];
+  const instruments =
+    instrumentsResult.data ?? [];
   const operations =
     operationsResult.data ?? [];
 
@@ -185,6 +212,13 @@ export default async function OperationsPage({
     );
   }
 
+  if (instrumentsResult.error) {
+    console.error(
+      "Instruments query failed:",
+      instrumentsResult.error,
+    );
+  }
+
   if (operationsResult.error) {
     console.error(
       "Operations query failed:",
@@ -203,7 +237,7 @@ export default async function OperationsPage({
     const { data, error } = await supabase
       .from("portfolio_operation_entries")
       .select(
-        "id, operation_id, sequence_no, account_id, cash_delta, currency, component",
+        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, currency, component",
       )
       .in("operation_id", operationIds)
       .order("operation_id", {
@@ -241,6 +275,13 @@ export default async function OperationsPage({
     accounts.map((account) => [
       account.id,
       account,
+    ]),
+  );
+
+  const instrumentMap = new Map(
+    instruments.map((instrument) => [
+      instrument.id,
+      instrument,
     ]),
   );
 
@@ -324,7 +365,21 @@ export default async function OperationsPage({
           </p>
         </header>
 
-        <nav className="mt-8 grid gap-4 sm:grid-cols-2">
+        <nav className="mt-8 grid gap-4 sm:grid-cols-3">
+          <Link
+            href="/portfolio/operations/trade"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">
+              Buy or sell
+            </p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Record an instrument purchase or sale using the
+              actual account cash movement.
+            </p>
+          </Link>
+
           <Link
             href="/portfolio/operations/internal-transfer"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
@@ -429,65 +484,102 @@ export default async function OperationsPage({
                       {entries.length > 0 && (
                         <ul className="mt-4 space-y-2">
                           {entries.map((entry) => {
-                            const account =
-                              accountMap.get(
-                                entry.account_id,
-                              );
+                            const account = accountMap.get(
+                              entry.account_id,
+                            );
 
                             const owner = account
-                              ? ownerMap.get(
-                                  account.owner_id,
-                                )
+                              ? ownerMap.get(account.owner_id)
                               : undefined;
 
                             const provider = account
-                              ? providerMap.get(
-                                  account.provider_id,
-                                )
+                              ? providerMap.get(account.provider_id)
                               : undefined;
 
-                            const cashDelta =
-                              Number(
-                                entry.cash_delta,
-                              );
+                            const instrument = entry.instrument_id
+                              ? instrumentMap.get(entry.instrument_id)
+                              : undefined;
 
-                            const accountDescription =
-                              account
-                                ? [
-                                    owner?.display_name,
-                                    provider?.name,
-                                    account.name,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")
-                                : "Unknown account";
+                            const cashDelta = Number(
+                              entry.cash_delta,
+                            );
+
+                            const quantityDelta = Number(
+                              entry.quantity_delta,
+                            );
+
+                            const hasQuantityChange =
+                              Boolean(instrument) &&
+                              quantityDelta !== 0;
+
+                            const accountDescription = account
+                              ? [
+                                  owner?.display_name,
+                                  provider?.name,
+                                  account.name,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                              : "Unknown account";
+
+                            const instrumentDescription = instrument
+                              ? [
+                                  instrument.ticker,
+                                  instrument.name,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                              : null;
 
                             return (
                               <li
                                 key={entry.id}
-                                className="flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                className="flex flex-col gap-3 rounded-lg bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                               >
-                                <p className="text-sm text-slate-600">
-                                  {
-                                    accountDescription
-                                  }
-                                </p>
+                                <div>
+                                  <p className="text-sm text-slate-600">
+                                    {accountDescription}
+                                  </p>
 
-                                <span
-                                  className={
-                                    cashDelta >= 0
-                                      ? "w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-                                      : "w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
-                                  }
-                                >
-                                  {cashDelta >= 0
-                                    ? "+"
-                                    : ""}
-                                  {formatAmount(
-                                    cashDelta,
-                                  )}{" "}
-                                  {entry.currency}
-                                </span>
+                                  {hasQuantityChange &&
+                                    instrumentDescription && (
+                                      <p className="mt-1 text-xs text-slate-500">
+                                        {instrumentDescription}
+                                      </p>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 sm:justify-end">
+                                  {hasQuantityChange &&
+                                    instrument && (
+                                      <span
+                                        className={
+                                          quantityDelta >= 0
+                                            ? "w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
+                                            : "w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
+                                        }
+                                      >
+                                        {quantityDelta >= 0 ? "+" : ""}
+                                        {formatQuantity(quantityDelta)}{" "}
+                                        {instrument.ticker ||
+                                          instrument.name}
+                                      </span>
+                                    )}
+
+                                  {cashDelta !== 0 && (
+                                    <span
+                                      className={
+                                        cashDelta >= 0
+                                          ? "w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                                          : "w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
+                                      }
+                                    >
+                                      {cashDelta >= 0 ? "+" : ""}
+                                      {formatAmount(cashDelta)}{" "}
+                                      {entry.currency}
+                                    </span>
+                                  )}
+                                </div>
                               </li>
                             );
                           })}

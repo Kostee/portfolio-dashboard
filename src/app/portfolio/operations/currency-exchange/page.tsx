@@ -18,20 +18,30 @@ export default async function CurrencyExchangePage({
 }: CurrencyExchangePageProps) {
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const { data: claimsData } =
+    await supabase.auth.getClaims();
 
   if (!claimsData?.claims) {
     redirect("/portfolio/login");
   }
 
-  const { error: errorCode } = await searchParams;
+  const { error: errorCode } =
+    await searchParams;
 
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { data: membership, error: membershipError } =
+    await supabase
+      .from("workspace_members")
+      .select("workspace_id, role")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+  if (membershipError) {
+    console.error(
+      "Workspace membership query failed:",
+      membershipError,
+    );
+  }
 
   if (!membership) {
     redirect("/portfolio");
@@ -45,26 +55,39 @@ export default async function CurrencyExchangePage({
   ] = await Promise.all([
     supabase
       .from("workspaces")
-      .select("name, timezone, base_currency")
+      .select(
+        "name, timezone, base_currency",
+      )
       .eq("id", membership.workspace_id)
       .single(),
 
     supabase
       .from("owners")
-      .select("id, display_name, sort_order")
-      .eq("workspace_id", membership.workspace_id),
+      .select(
+        "id, display_name, sort_order",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
 
     supabase
       .from("providers")
       .select("id, name")
-      .eq("workspace_id", membership.workspace_id),
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
 
     supabase
       .from("accounts")
       .select(
         "id, owner_id, provider_id, name, base_currency",
       )
-      .eq("workspace_id", membership.workspace_id)
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
       .eq("is_active", true),
   ]);
 
@@ -73,8 +96,39 @@ export default async function CurrencyExchangePage({
   const providers = providersResult.data ?? [];
   const accounts = accountsResult.data ?? [];
 
+  if (workspaceResult.error) {
+    console.error(
+      "Workspace query failed:",
+      workspaceResult.error,
+    );
+  }
+
+  if (ownersResult.error) {
+    console.error(
+      "Owners query failed:",
+      ownersResult.error,
+    );
+  }
+
+  if (providersResult.error) {
+    console.error(
+      "Providers query failed:",
+      providersResult.error,
+    );
+  }
+
+  if (accountsResult.error) {
+    console.error(
+      "Accounts query failed:",
+      accountsResult.error,
+    );
+  }
+
   const ownerMap = new Map(
-    owners.map((owner) => [owner.id, owner]),
+    owners.map((owner) => [
+      owner.id,
+      owner,
+    ]),
   );
 
   const providerMap = new Map(
@@ -87,14 +141,18 @@ export default async function CurrencyExchangePage({
   const sortedAccounts = [...accounts].sort(
     (first, second) => {
       const ownerOrderDifference =
-        (ownerMap.get(first.owner_id)?.sort_order ?? 999) -
-        (ownerMap.get(second.owner_id)?.sort_order ?? 999);
+        (ownerMap.get(first.owner_id)
+          ?.sort_order ?? 999) -
+        (ownerMap.get(second.owner_id)
+          ?.sort_order ?? 999);
 
       if (ownerOrderDifference !== 0) {
         return ownerOrderDifference;
       }
 
-      return first.name.localeCompare(second.name);
+      return first.name.localeCompare(
+        second.name,
+      );
     },
   );
 
@@ -102,16 +160,24 @@ export default async function CurrencyExchangePage({
     membership.role === "admin" ||
     membership.role === "editor";
 
+  const workspaceTimeZone =
+    workspace?.timezone ?? "Europe/Warsaw";
+
   const defaultDate = getDateInTimeZone(
-    workspace?.timezone ?? "Europe/Warsaw",
+    workspaceTimeZone,
   );
 
   const renderAccountOptions = () =>
     sortedAccounts.map((account) => (
-      <option key={account.id} value={account.id}>
+      <option
+        key={account.id}
+        value={account.id}
+      >
         {[
-          ownerMap.get(account.owner_id)?.display_name,
-          providerMap.get(account.provider_id)?.name,
+          ownerMap.get(account.owner_id)
+            ?.display_name,
+          providerMap.get(account.provider_id)
+            ?.name,
           account.name,
           account.base_currency,
         ]
@@ -141,7 +207,8 @@ export default async function CurrencyExchangePage({
 
           <p className="mt-2 text-sm text-slate-600">
             Workspace:{" "}
-            {workspace?.name ?? "Portfolio workspace"}
+            {workspace?.name ??
+              "Portfolio workspace"}
           </p>
         </header>
 
@@ -151,38 +218,67 @@ export default async function CurrencyExchangePage({
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            The operation records the outgoing and incoming
-            amounts as two balanced ledger entries.
+            The operation records the outgoing and
+            incoming amounts as two balanced ledger
+            entries.
           </p>
 
           {errorCode && (
             <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-              The exchange could not be posted. Check the
-              accounts, currencies and amounts.
+              The exchange could not be posted.
+              Check the accounts, date, time,
+              currencies and amounts.
             </p>
           )}
 
-          {canEdit && sortedAccounts.length >= 2 ? (
+          {canEdit &&
+          sortedAccounts.length >= 2 ? (
             <form
               action={createCurrencyExchange}
               className="mt-6 space-y-4"
             >
-              <div>
-                <label
-                  htmlFor="operationDate"
-                  className="block text-sm font-medium text-slate-700"
-                >
-                  Operation date
-                </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="operationDate"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Operation date
+                  </label>
 
-                <input
-                  id="operationDate"
-                  name="operationDate"
-                  type="date"
-                  required
-                  defaultValue={defaultDate}
-                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                />
+                  <input
+                    id="operationDate"
+                    name="operationDate"
+                    type="date"
+                    required
+                    defaultValue={defaultDate}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="operationTime"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Operation time
+                    <span className="ml-1 font-normal text-slate-500">
+                      (optional)
+                    </span>
+                  </label>
+
+                  <input
+                    id="operationTime"
+                    name="operationTime"
+                    type="time"
+                    step={60}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    {workspaceTimeZone}
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -203,6 +299,7 @@ export default async function CurrencyExchangePage({
                   <option value="" disabled>
                     Select source account
                   </option>
+
                   {renderAccountOptions()}
                 </select>
               </div>
@@ -240,13 +337,18 @@ export default async function CurrencyExchangePage({
                     id="fromCurrency"
                     name="fromCurrency"
                     defaultValue="PLN"
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   >
-                    {OPERATION_CURRENCIES.map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
+                    {OPERATION_CURRENCIES.map(
+                      (currency) => (
+                        <option
+                          key={currency}
+                          value={currency}
+                        >
+                          {currency}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </div>
               </div>
@@ -264,11 +366,12 @@ export default async function CurrencyExchangePage({
                   name="toAccountId"
                   required
                   defaultValue=""
-                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                 >
                   <option value="" disabled>
                     Select destination account
                   </option>
+
                   {renderAccountOptions()}
                 </select>
               </div>
@@ -290,7 +393,7 @@ export default async function CurrencyExchangePage({
                     min="0.00000001"
                     step="0.00000001"
                     placeholder="133.01"
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   />
                 </div>
 
@@ -306,13 +409,18 @@ export default async function CurrencyExchangePage({
                     id="toCurrency"
                     name="toCurrency"
                     defaultValue="USD"
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   >
-                    {OPERATION_CURRENCIES.map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
+                    {OPERATION_CURRENCIES.map(
+                      (currency) => (
+                        <option
+                          key={currency}
+                          value={currency}
+                        >
+                          {currency}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </div>
               </div>
@@ -331,12 +439,16 @@ export default async function CurrencyExchangePage({
                   type="number"
                   min="0.01"
                   step="0.01"
-                  placeholder={`Optional — ${workspace?.base_currency ?? "PLN"}`}
-                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  placeholder={`Optional — ${
+                    workspace?.base_currency ??
+                    "PLN"
+                  }`}
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                 />
 
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Required only when neither account uses{" "}
+                  Required only when neither account
+                  uses{" "}
                   {workspace?.base_currency ?? "PLN"}.
                 </p>
               </div>
@@ -355,7 +467,7 @@ export default async function CurrencyExchangePage({
                   type="text"
                   maxLength={250}
                   placeholder="PLN to USD conversion"
-                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                 />
               </div>
 
@@ -368,7 +480,8 @@ export default async function CurrencyExchangePage({
             </form>
           ) : (
             <p className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              At least two editable accounts are required.
+              At least two editable accounts are
+              required.
             </p>
           )}
         </section>

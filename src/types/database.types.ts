@@ -459,6 +459,13 @@ export type Database = {
             foreignKeyName: "portfolio_operation_entries_operation_workspace_fk"
             columns: ["workspace_id", "operation_id"]
             isOneToOne: false
+            referencedRelation: "portfolio_operation_legs"
+            referencedColumns: ["workspace_id", "operation_id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_operation_workspace_fk"
+            columns: ["workspace_id", "operation_id"]
+            isOneToOne: false
             referencedRelation: "portfolio_operations"
             referencedColumns: ["workspace_id", "id"]
           },
@@ -724,7 +731,58 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      portfolio_operation_legs: {
+        Row: {
+          account_base_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          base_cash_delta: number | null
+          base_value_delta: number | null
+          cash_delta: number | null
+          component:
+            | Database["public"]["Enums"]["portfolio_operation_component"]
+            | null
+          currency: string | null
+          description: string | null
+          entry_id: string | null
+          executed_at: string | null
+          executed_at_local: string | null
+          fx_rate_to_base: number | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          notes: string | null
+          operation_created_at: string | null
+          operation_date: string | null
+          operation_id: string | null
+          operation_time_local: string | null
+          operation_type:
+            | Database["public"]["Enums"]["portfolio_operation_type"]
+            | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          quantity_delta: number | null
+          sequence_no: number | null
+          source: Database["public"]["Enums"]["portfolio_data_source"] | null
+          status:
+            | Database["public"]["Enums"]["portfolio_operation_status"]
+            | null
+          unit_price: number | null
+          value_delta: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       create_cash_operation: {
@@ -735,6 +793,7 @@ export type Database = {
           p_description?: string
           p_notes?: string
           p_operation_date: string
+          p_operation_time?: string
           p_operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
         }
         Returns: string
@@ -748,6 +807,7 @@ export type Database = {
           p_from_currency: string
           p_notes?: string
           p_operation_date: string
+          p_operation_time?: string
           p_to_account_id: string
           p_to_amount: number
           p_to_currency: string
@@ -762,6 +822,7 @@ export type Database = {
           p_from_account_id: string
           p_notes?: string
           p_operation_date: string
+          p_operation_time?: string
           p_to_account_id: string
         }
         Returns: string

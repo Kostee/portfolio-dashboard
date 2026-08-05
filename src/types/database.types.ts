@@ -731,6 +731,104 @@ export type Database = {
       }
     }
     Views: {
+      portfolio_current_cash_balances: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          base_cash_balance: number | null
+          cash_balance: number | null
+          currency: string | null
+          first_activity_date: string | null
+          last_activity_date: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_current_reported_balances: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          base_reported_balance: number | null
+          currency: string | null
+          first_activity_date: string | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          last_activity_date: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          reported_balance: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_current_unit_positions: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          first_activity_date: string | null
+          instrument_currency: string | null
+          instrument_exchange: string | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          last_activity_date: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          quantity: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       portfolio_operation_legs: {
         Row: {
           account_base_currency: string | null

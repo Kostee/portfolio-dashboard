@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import {
   isValidIsoDate,
+  isValidOperationTime,
   parsePositiveNumber,
   readText,
 } from "../form-helpers";
@@ -17,7 +18,8 @@ export async function createCurrencyExchange(
 ) {
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const { data: claimsData } =
+    await supabase.auth.getClaims();
 
   if (!claimsData?.claims) {
     redirect("/portfolio/login");
@@ -38,6 +40,11 @@ export async function createCurrencyExchange(
     "operationDate",
   );
 
+  const operationTime = readText(
+    formData,
+    "operationTime",
+  );
+
   const fromAmount = parsePositiveNumber(
     readText(formData, "fromAmount"),
   );
@@ -56,7 +63,10 @@ export async function createCurrencyExchange(
     "toCurrency",
   ).toUpperCase();
 
-  const rawBaseValue = readText(formData, "baseValue");
+  const rawBaseValue = readText(
+    formData,
+    "baseValue",
+  );
 
   let baseValue: number | undefined;
 
@@ -96,7 +106,19 @@ export async function createCurrencyExchange(
     );
   }
 
-  if (fromAmount === null || toAmount === null) {
+  if (
+    operationTime &&
+    !isValidOperationTime(operationTime)
+  ) {
+    redirect(
+      "/portfolio/operations/currency-exchange?error=time_invalid",
+    );
+  }
+
+  if (
+    fromAmount === null ||
+    toAmount === null
+  ) {
     redirect(
       "/portfolio/operations/currency-exchange?error=amount_required",
     );
@@ -145,28 +167,38 @@ export async function createCurrencyExchange(
     );
   }
 
-  const [
-    accountsResult,
-    workspaceResult,
-  ] = await Promise.all([
-    supabase
-      .from("accounts")
-      .select("id, base_currency")
-      .eq("workspace_id", membership.workspace_id)
-      .eq("is_active", true)
-      .in("id", [fromAccountId, toAccountId]),
+  const [accountsResult, workspaceResult] =
+    await Promise.all([
+      supabase
+        .from("accounts")
+        .select("id, base_currency")
+        .eq(
+          "workspace_id",
+          membership.workspace_id,
+        )
+        .eq("is_active", true)
+        .in("id", [
+          fromAccountId,
+          toAccountId,
+        ]),
 
-    supabase
-      .from("workspaces")
-      .select("base_currency")
-      .eq("id", membership.workspace_id)
-      .single(),
-  ]);
+      supabase
+        .from("workspaces")
+        .select("base_currency")
+        .eq(
+          "id",
+          membership.workspace_id,
+        )
+        .single(),
+    ]);
 
   const accounts = accountsResult.data;
   const workspace = workspaceResult.data;
 
-  if (accountsResult.error || accounts?.length !== 2) {
+  if (
+    accountsResult.error ||
+    accounts?.length !== 2
+  ) {
     console.error(
       "Exchange account validation failed:",
       accountsResult.error,
@@ -177,17 +209,32 @@ export async function createCurrencyExchange(
     );
   }
 
+  if (workspaceResult.error || !workspace) {
+    console.error(
+      "Workspace query failed:",
+      workspaceResult.error,
+    );
+
+    redirect(
+      "/portfolio/operations/currency-exchange?error=workspace_not_found",
+    );
+  }
+
   const sourceAccount = accounts.find(
-    (account) => account.id === fromAccountId,
+    (account) =>
+      account.id === fromAccountId,
   );
 
   const destinationAccount = accounts.find(
-    (account) => account.id === toAccountId,
+    (account) =>
+      account.id === toAccountId,
   );
 
   if (
-    sourceAccount?.base_currency !== fromCurrency ||
-    destinationAccount?.base_currency !== toCurrency
+    sourceAccount?.base_currency !==
+      fromCurrency ||
+    destinationAccount?.base_currency !==
+      toCurrency
   ) {
     redirect(
       "/portfolio/operations/currency-exchange?error=currency_mismatch",
@@ -195,7 +242,7 @@ export async function createCurrencyExchange(
   }
 
   const workspaceBaseCurrency =
-    workspace?.base_currency ?? "PLN";
+    workspace.base_currency;
 
   if (
     fromCurrency !== workspaceBaseCurrency &&
@@ -213,12 +260,15 @@ export async function createCurrencyExchange(
       p_from_account_id: fromAccountId,
       p_to_account_id: toAccountId,
       p_operation_date: operationDate,
+      p_operation_time:
+        operationTime || undefined,
       p_from_amount: fromAmount,
       p_from_currency: fromCurrency,
       p_to_amount: toAmount,
       p_to_currency: toCurrency,
       p_base_value: baseValue,
-      p_description: description || undefined,
+      p_description:
+        description || undefined,
     },
   );
 

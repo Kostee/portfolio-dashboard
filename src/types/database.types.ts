@@ -778,14 +778,14 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            foreignKeyName: "position_snapshots_account_workspace_fk"
             columns: ["workspace_id", "account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["workspace_id", "id"]
           },
           {
-            foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            foreignKeyName: "position_snapshots_instrument_workspace_fk"
             columns: ["workspace_id", "instrument_id"]
             isOneToOne: false
             referencedRelation: "instruments"
@@ -822,6 +822,53 @@ export type Database = {
           },
           {
             foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_latest_position_snapshots: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          created_at: string | null
+          currency: string | null
+          first_snapshot_date: string | null
+          fx_rate_to_base: number | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          market_value: number | null
+          market_value_base: number | null
+          notes: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          quantity: number | null
+          snapshot_date: string | null
+          snapshot_id: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"] | null
+          tracking_mode:
+            | Database["public"]["Enums"]["instrument_tracking_mode"]
+            | null
+          unit_price: number | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "position_snapshots_instrument_workspace_fk"
             columns: ["workspace_id", "instrument_id"]
             isOneToOne: false
             referencedRelation: "instruments"
@@ -878,6 +925,52 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_position_snapshot_history: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          created_at: string | null
+          currency: string | null
+          fx_rate_to_base: number | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          market_value: number | null
+          market_value_base: number | null
+          notes: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          quantity: number | null
+          snapshot_date: string | null
+          snapshot_id: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"] | null
+          tracking_mode:
+            | Database["public"]["Enums"]["instrument_tracking_mode"]
+            | null
+          unit_price: number | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "position_snapshots_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
           },
         ]
       }
@@ -988,6 +1081,20 @@ export type Database = {
           p_detailed_tracking_start_date?: string
           p_name: string
           p_timezone?: string
+        }
+        Returns: string
+      }
+      upsert_position_snapshot: {
+        Args: {
+          p_account_id: string
+          p_currency: string
+          p_instrument_id: string
+          p_market_value: number
+          p_market_value_base?: number
+          p_notes?: string
+          p_quantity?: number
+          p_snapshot_date: string
+          p_unit_price?: number
         }
         Returns: string
       }

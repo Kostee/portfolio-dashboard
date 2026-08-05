@@ -317,6 +317,13 @@ export default async function PortfolioStatePage() {
             >
               Add opening state
             </Link>
+
+            <Link
+              href="/portfolio/valuations"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            >
+              Manage valuations
+            </Link>
           </div>
         </header>
 

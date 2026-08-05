@@ -366,7 +366,7 @@ export default async function OperationsPage({
           </p>
         </header>
 
-        <nav className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <nav className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Link
             href="/portfolio/operations/trade"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
@@ -420,6 +420,20 @@ export default async function OperationsPage({
             <p className="mt-2 text-sm text-slate-600">
               Record assets and cash already held when
               detailed tracking begins.
+            </p>
+          </Link>
+
+          <Link
+            href="/portfolio/state"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">
+              Portfolio state
+            </p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Review calculated positions, cash balances and
+              consistency warnings.
             </p>
           </Link>
         </nav>

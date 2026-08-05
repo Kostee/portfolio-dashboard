@@ -10,27 +10,11 @@ import {
   isOperationCurrency,
 } from "./operation-options";
 
-function readText(
-  formData: FormData,
-  fieldName: string,
-): string {
-  const value = formData.get(fieldName);
-
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isValidDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const parsedDate = new Date(`${value}T00:00:00Z`);
-
-  return (
-    !Number.isNaN(parsedDate.getTime()) &&
-    parsedDate.toISOString().slice(0, 10) === value
-  );
-}
+import {
+  isValidIsoDate,
+  parsePositiveNumber,
+  readText,
+} from "./form-helpers";
 
 export async function createCashOperation(
   formData: FormData,
@@ -52,23 +36,20 @@ export async function createCashOperation(
     formData,
     "operationType",
   );
-  const rawAmount = readText(formData, "amount").replace(
-    ",",
-    ".",
-  );
+  const rawAmount = readText(formData, "amount");
   const currency = readText(
     formData,
     "currency",
   ).toUpperCase();
   const description = readText(formData, "description");
 
-  const amount = Number(rawAmount);
+  const amount = parsePositiveNumber(rawAmount);
 
   if (!accountId) {
     redirect("/portfolio/operations?error=account_required");
   }
 
-  if (!isValidDate(operationDate)) {
+  if (!isValidIsoDate(operationDate)) {
     redirect("/portfolio/operations?error=date_required");
   }
 
@@ -76,7 +57,7 @@ export async function createCashOperation(
     redirect("/portfolio/operations?error=type_required");
   }
 
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (amount === null) {
     redirect("/portfolio/operations?error=amount_required");
   }
 

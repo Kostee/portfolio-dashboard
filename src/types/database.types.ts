@@ -827,6 +827,45 @@ export type Database = {
         }
         Returns: string
       }
+      create_opening_cash_balance: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_base_value?: number
+          p_currency: string
+          p_description?: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_time?: string
+        }
+        Returns: string
+      }
+      create_opening_reported_balance: {
+        Args: {
+          p_account_id: string
+          p_base_value?: number
+          p_currency: string
+          p_description?: string
+          p_instrument_id: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_time?: string
+          p_value_amount: number
+        }
+        Returns: string
+      }
+      create_opening_units_position: {
+        Args: {
+          p_account_id: string
+          p_description?: string
+          p_instrument_id: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_time?: string
+          p_quantity: number
+        }
+        Returns: string
+      }
       create_trade_operation: {
         Args: {
           p_account_id: string

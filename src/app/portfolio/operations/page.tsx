@@ -29,6 +29,7 @@ type OperationEntrySummary = Pick<
   | "instrument_id"
   | "quantity_delta"
   | "cash_delta"
+  | "value_delta"
   | "currency"
   | "component"
 >;
@@ -237,7 +238,7 @@ export default async function OperationsPage({
     const { data, error } = await supabase
       .from("portfolio_operation_entries")
       .select(
-        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, currency, component",
+        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, value_delta, currency, component",
       )
       .in("operation_id", operationIds)
       .order("operation_id", {
@@ -365,7 +366,7 @@ export default async function OperationsPage({
           </p>
         </header>
 
-        <nav className="mt-8 grid gap-4 sm:grid-cols-3">
+        <nav className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Link
             href="/portfolio/operations/trade"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
@@ -405,6 +406,20 @@ export default async function OperationsPage({
             <p className="mt-2 text-sm text-slate-600">
               Record outgoing and incoming amounts
               in different currencies.
+            </p>
+          </Link>
+
+          <Link
+            href="/portfolio/opening-state"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">
+              Opening state
+            </p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Record assets and cash already held when
+              detailed tracking begins.
             </p>
           </Link>
         </nav>
@@ -504,6 +519,10 @@ export default async function OperationsPage({
                               entry.cash_delta,
                             );
 
+                            const valueDelta = Number(
+                              entry.value_delta,
+                            );
+
                             const quantityDelta = Number(
                               entry.quantity_delta,
                             );
@@ -579,6 +598,23 @@ export default async function OperationsPage({
                                       {entry.currency}
                                     </span>
                                   )}
+
+                                 {valueDelta !== 0 &&
+                                    entry.component === "adjustment" &&
+                                    quantityDelta === 0 &&
+                                    cashDelta === 0 && (
+                                      <span
+                                        className={
+                                          valueDelta >= 0
+                                            ? "w-fit rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                                            : "w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
+                                        }
+                                      >
+                                        {valueDelta >= 0 ? "+" : ""}
+                                        {formatAmount(valueDelta)}{" "}
+                                        {entry.currency}
+                                      </span>
+                                    )}
                                 </div>
                               </li>
                             );

@@ -18,13 +18,15 @@ export default async function InternalTransferPage({
 }: InternalTransferPageProps) {
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const { data: claimsData } =
+    await supabase.auth.getClaims();
 
   if (!claimsData?.claims) {
     redirect("/portfolio/login");
   }
 
-  const { error: errorCode } = await searchParams;
+  const { error: errorCode } =
+    await searchParams;
 
   const { data: membership, error: membershipError } =
     await supabase
@@ -59,20 +61,31 @@ export default async function InternalTransferPage({
 
     supabase
       .from("owners")
-      .select("id, display_name, sort_order")
-      .eq("workspace_id", membership.workspace_id),
+      .select(
+        "id, display_name, sort_order",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
 
     supabase
       .from("providers")
       .select("id, name")
-      .eq("workspace_id", membership.workspace_id),
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
 
     supabase
       .from("accounts")
       .select(
         "id, owner_id, provider_id, name, base_currency, is_active",
       )
-      .eq("workspace_id", membership.workspace_id)
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
       .eq("is_active", true),
   ]);
 
@@ -81,8 +94,39 @@ export default async function InternalTransferPage({
   const providers = providersResult.data ?? [];
   const accounts = accountsResult.data ?? [];
 
+  if (workspaceResult.error) {
+    console.error(
+      "Workspace query failed:",
+      workspaceResult.error,
+    );
+  }
+
+  if (ownersResult.error) {
+    console.error(
+      "Owners query failed:",
+      ownersResult.error,
+    );
+  }
+
+  if (providersResult.error) {
+    console.error(
+      "Providers query failed:",
+      providersResult.error,
+    );
+  }
+
+  if (accountsResult.error) {
+    console.error(
+      "Accounts query failed:",
+      accountsResult.error,
+    );
+  }
+
   const ownerMap = new Map(
-    owners.map((owner) => [owner.id, owner]),
+    owners.map((owner) => [
+      owner.id,
+      owner,
+    ]),
   );
 
   const providerMap = new Map(
@@ -94,8 +138,13 @@ export default async function InternalTransferPage({
 
   const sortedAccounts = [...accounts].sort(
     (first, second) => {
-      const firstOwner = ownerMap.get(first.owner_id);
-      const secondOwner = ownerMap.get(second.owner_id);
+      const firstOwner = ownerMap.get(
+        first.owner_id,
+      );
+
+      const secondOwner = ownerMap.get(
+        second.owner_id,
+      );
 
       const ownerOrderDifference =
         (firstOwner?.sort_order ?? 999) -
@@ -105,7 +154,9 @@ export default async function InternalTransferPage({
         return ownerOrderDifference;
       }
 
-      return first.name.localeCompare(second.name);
+      return first.name.localeCompare(
+        second.name,
+      );
     },
   );
 
@@ -113,9 +164,26 @@ export default async function InternalTransferPage({
     membership.role === "admin" ||
     membership.role === "editor";
 
+  const workspaceTimeZone =
+    workspace?.timezone ?? "Europe/Warsaw";
+
   const defaultDate = getDateInTimeZone(
-    workspace?.timezone ?? "Europe/Warsaw",
+    workspaceTimeZone,
   );
+
+  const renderAccountLabel = (
+    account: (typeof sortedAccounts)[number],
+  ) =>
+    [
+      ownerMap.get(account.owner_id)
+        ?.display_name,
+      providerMap.get(account.provider_id)
+        ?.name,
+      account.name,
+      account.base_currency,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-900 sm:px-8">
@@ -138,7 +206,8 @@ export default async function InternalTransferPage({
 
           <p className="mt-2 text-sm text-slate-600">
             Workspace:{" "}
-            {workspace?.name ?? "Portfolio workspace"}
+            {workspace?.name ??
+              "Portfolio workspace"}
           </p>
         </header>
 
@@ -148,38 +217,67 @@ export default async function InternalTransferPage({
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Both accounts must use the same currency. The
-            operation creates equal and opposite ledger entries.
+            Both accounts must use the same currency.
+            The operation creates equal and opposite
+            ledger entries.
           </p>
 
           {errorCode && (
             <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-              The transfer could not be posted. Check the
-              accounts, currency and amount.
+              The transfer could not be posted.
+              Check the accounts, date, time,
+              currency and amount.
             </p>
           )}
 
-          {canEdit && sortedAccounts.length >= 2 ? (
+          {canEdit &&
+          sortedAccounts.length >= 2 ? (
             <form
               action={createInternalTransfer}
               className="mt-6 space-y-4"
             >
-              <div>
-                <label
-                  htmlFor="operationDate"
-                  className="block text-sm font-medium text-slate-700"
-                >
-                  Operation date
-                </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="operationDate"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Operation date
+                  </label>
 
-                <input
-                  id="operationDate"
-                  name="operationDate"
-                  type="date"
-                  required
-                  defaultValue={defaultDate}
-                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                />
+                  <input
+                    id="operationDate"
+                    name="operationDate"
+                    type="date"
+                    required
+                    defaultValue={defaultDate}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="operationTime"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Operation time
+                    <span className="ml-1 font-normal text-slate-500">
+                      (optional)
+                    </span>
+                  </label>
+
+                  <input
+                    id="operationTime"
+                    name="operationTime"
+                    type="time"
+                    step={60}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    {workspaceTimeZone}
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -201,23 +299,18 @@ export default async function InternalTransferPage({
                     Select source account
                   </option>
 
-                  {sortedAccounts.map((account) => (
-                    <option
-                      key={account.id}
-                      value={account.id}
-                    >
-                      {[
-                        ownerMap.get(account.owner_id)
-                          ?.display_name,
-                        providerMap.get(account.provider_id)
-                          ?.name,
-                        account.name,
-                        account.base_currency,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </option>
-                  ))}
+                  {sortedAccounts.map(
+                    (account) => (
+                      <option
+                        key={account.id}
+                        value={account.id}
+                      >
+                        {renderAccountLabel(
+                          account,
+                        )}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
 
@@ -240,23 +333,18 @@ export default async function InternalTransferPage({
                     Select destination account
                   </option>
 
-                  {sortedAccounts.map((account) => (
-                    <option
-                      key={account.id}
-                      value={account.id}
-                    >
-                      {[
-                        ownerMap.get(account.owner_id)
-                          ?.display_name,
-                        providerMap.get(account.provider_id)
-                          ?.name,
-                        account.name,
-                        account.base_currency,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </option>
-                  ))}
+                  {sortedAccounts.map(
+                    (account) => (
+                      <option
+                        key={account.id}
+                        value={account.id}
+                      >
+                        {renderAccountLabel(
+                          account,
+                        )}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
 
@@ -295,14 +383,16 @@ export default async function InternalTransferPage({
                     defaultValue="PLN"
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   >
-                    {OPERATION_CURRENCIES.map((currency) => (
-                      <option
-                        key={currency}
-                        value={currency}
-                      >
-                        {currency}
-                      </option>
-                    ))}
+                    {OPERATION_CURRENCIES.map(
+                      (currency) => (
+                        <option
+                          key={currency}
+                          value={currency}
+                        >
+                          {currency}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </div>
               </div>
@@ -334,7 +424,8 @@ export default async function InternalTransferPage({
             </form>
           ) : (
             <p className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              At least two editable accounts are required.
+              At least two editable accounts are
+              required.
             </p>
           )}
         </section>

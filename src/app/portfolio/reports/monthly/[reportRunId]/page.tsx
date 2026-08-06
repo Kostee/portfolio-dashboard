@@ -23,6 +23,10 @@ import {
   AssetClassStructureChart,
 } from "@/components/reports/monthly/asset-class-structure-chart";
 
+import {
+  PortfolioHistoryChart,
+} from "@/components/reports/monthly/portfolio-history-chart";
+
 type MonthlyReportDetailsPageProps = {
   params: Promise<{
     reportRunId: string;
@@ -690,6 +694,26 @@ export default async function MonthlyReportDetailsPage({
               every report date is included.
             </p>
           </div>
+
+          {chartData.history.points.length >
+            0 && (
+            <div className="mt-6">
+                <PortfolioHistoryChart
+                points={
+                    chartData.history.points
+                }
+                asOfDate={
+                    report.asOfDate
+                }
+                revision={
+                    report.revision
+                }
+                baseCurrency={
+                    report.baseCurrency
+                }
+                />
+            </div>
+            )}
 
           {chartData.history.points.length >
           0 ? (

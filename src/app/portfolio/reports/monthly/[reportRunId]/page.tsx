@@ -64,6 +64,15 @@ function formatAmount(
   ).format(value);
 }
 
+function formatSignedAmount(
+  value: number,
+): string {
+  const sign =
+    value > 0 ? "+" : "";
+
+  return `${sign}${formatAmount(value)}`;
+}
+
 function formatQuantity(
   value: number,
 ): string {
@@ -355,6 +364,19 @@ export default async function MonthlyReportDetailsPage({
   const report =
     chartData.report;
 
+  const contributionReturnPercentage =
+    report.cumulativeContributionsBase !==
+      null &&
+    report.cumulativeContributionsBase >
+      0 &&
+    report.portfolioGainBase !== null
+      ? (
+          report.portfolioGainBase /
+          report.cumulativeContributionsBase
+        ) *
+        100
+      : null;
+
   const availableChartCount =
     [
       chartData.gpw.items.length >
@@ -414,7 +436,7 @@ export default async function MonthlyReportDetailsPage({
           </div>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
               Total invested assets
@@ -427,6 +449,83 @@ export default async function MonthlyReportDetailsPage({
               {report.baseCurrency}
             </p>
           </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">
+                Cumulative contributions
+            </p>
+
+            {report.cumulativeContributionsBase !==
+            null ? (
+                <>
+                <p className="mt-2 text-2xl font-semibold">
+                    {formatAmount(
+                    report.cumulativeContributionsBase,
+                    )}{" "}
+                    {report.baseCurrency}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                    Baseline:{" "}
+                    {report.contributionBaselineDate ??
+                    "Unavailable"}
+                </p>
+                </>
+            ) : (
+                <p className="mt-2 text-lg font-semibold text-amber-700">
+                Not available
+                </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">
+                Gain above contributions
+            </p>
+
+            {report.portfolioGainBase !==
+            null ? (
+                <>
+                <p
+                    className={
+                    report.portfolioGainBase >= 0
+                        ? "mt-2 text-2xl font-semibold text-emerald-700"
+                        : "mt-2 text-2xl font-semibold text-red-700"
+                    }
+                >
+                    {formatSignedAmount(
+                    report.portfolioGainBase,
+                    )}{" "}
+                    {report.baseCurrency}
+                </p>
+
+                {contributionReturnPercentage !==
+                    null && (
+                    <p
+                    className={
+                        contributionReturnPercentage >=
+                        0
+                        ? "mt-1 text-xs font-medium text-emerald-700"
+                        : "mt-1 text-xs font-medium text-red-700"
+                    }
+                    >
+                    {contributionReturnPercentage >
+                    0
+                        ? "+"
+                        : ""}
+                    {formatPercentage(
+                        contributionReturnPercentage,
+                    )}
+                    % of cumulative contributions
+                    </p>
+                )}
+                </>
+            ) : (
+                <p className="mt-2 text-lg font-semibold text-amber-700">
+                Not available
+                </p>
+            )}
+        </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
@@ -478,10 +577,27 @@ export default async function MonthlyReportDetailsPage({
         </section>
 
         <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm leading-6 text-blue-900">
-          These previews use only frozen report
-          items. Cash balances are excluded from
-          every dataset.
+            These previews use only frozen report
+            data. Cash balances are excluded from
+            every chart. Cumulative contributions
+            are calculated from the baseline dated{" "}
+            <span className="font-semibold">
+                {report.contributionBaselineDate ??
+                "—"}
+            </span>
+            {" "}and later external deposits and
+            withdrawals.
         </div>
+
+        {report.cumulativeContributionsBase ===
+            null && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-800">
+                This report does not contain frozen
+                cumulative-contribution data. Configure
+                a contribution baseline and create a
+                new report revision.
+            </div>
+        )}
 
         {/* 1. GPW */}
 

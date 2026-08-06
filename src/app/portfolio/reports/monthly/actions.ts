@@ -955,15 +955,7 @@ export async function createMonthlyReportSnapshot(
     "/portfolio/state",
   );
 
-  const searchParams =
-    new URLSearchParams({
-      asOf: asOfDate,
-      success:
-        "report_snapshot_created",
-      reportRunId,
-    });
-
   redirect(
-    `${MONTHLY_REPORT_PATH}?${searchParams.toString()}`,
+    `/portfolio/reports/monthly/${reportRunId}`,
   );
 }

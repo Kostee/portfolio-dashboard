@@ -439,6 +439,47 @@ export type Database = {
           },
         ]
       }
+      portfolio_contribution_baselines: {
+        Row: {
+          baseline_date: string
+          created_at: string
+          created_by: string | null
+          cumulative_contributions_base: number
+          id: string
+          notes: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          baseline_date: string
+          created_at?: string
+          created_by?: string | null
+          cumulative_contributions_base: number
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          baseline_date?: string
+          created_at?: string
+          created_by?: string | null
+          cumulative_contributions_base?: number
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_contribution_baselines_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_operation_entries: {
         Row: {
           account_id: string
@@ -596,12 +637,15 @@ export type Database = {
           account_id: string
           account_name: string
           account_type: string
+          asset_class_code: string | null
+          asset_class_color: string | null
           asset_class_id: string | null
           asset_class_name: string | null
           asset_class_sort_order: number | null
           created_at: string
           currency: string
           id: string
+          instrument_exchange: string | null
           instrument_id: string
           instrument_kind: string
           instrument_name: string
@@ -626,12 +670,15 @@ export type Database = {
           account_id: string
           account_name: string
           account_type: string
+          asset_class_code?: string | null
+          asset_class_color?: string | null
           asset_class_id?: string | null
           asset_class_name?: string | null
           asset_class_sort_order?: number | null
           created_at?: string
           currency: string
           id?: string
+          instrument_exchange?: string | null
           instrument_id: string
           instrument_kind: string
           instrument_name: string
@@ -656,12 +703,15 @@ export type Database = {
           account_id?: string
           account_name?: string
           account_type?: string
+          asset_class_code?: string | null
+          asset_class_color?: string | null
           asset_class_id?: string | null
           asset_class_name?: string | null
           asset_class_sort_order?: number | null
           created_at?: string
           currency?: string
           id?: string
+          instrument_exchange?: string | null
           instrument_id?: string
           instrument_kind?: string
           instrument_name?: string
@@ -709,8 +759,11 @@ export type Database = {
         Row: {
           as_of_date: string
           base_currency: string
+          contribution_baseline_date: string | null
+          contribution_baseline_id: string | null
           created_at: string
           created_by: string | null
+          cumulative_contributions_base: number | null
           generated_at: string | null
           id: string
           item_count: number
@@ -724,8 +777,11 @@ export type Database = {
         Insert: {
           as_of_date: string
           base_currency: string
+          contribution_baseline_date?: string | null
+          contribution_baseline_id?: string | null
           created_at?: string
           created_by?: string | null
+          cumulative_contributions_base?: number | null
           generated_at?: string | null
           id?: string
           item_count?: number
@@ -739,8 +795,11 @@ export type Database = {
         Update: {
           as_of_date?: string
           base_currency?: string
+          contribution_baseline_date?: string | null
+          contribution_baseline_id?: string | null
           created_at?: string
           created_by?: string | null
+          cumulative_contributions_base?: number | null
           generated_at?: string | null
           id?: string
           item_count?: number
@@ -752,6 +811,20 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "portfolio_report_runs_contribution_baseline_id_fkey"
+            columns: ["contribution_baseline_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_contribution_baseline_history"
+            referencedColumns: ["baseline_id"]
+          },
+          {
+            foreignKeyName: "portfolio_report_runs_contribution_baseline_id_fkey"
+            columns: ["contribution_baseline_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_contribution_baselines"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "portfolio_report_runs_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -996,6 +1069,44 @@ export type Database = {
           },
           {
             foreignKeyName: "cash_balance_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_contribution_baseline_history: {
+        Row: {
+          baseline_date: string | null
+          baseline_id: string | null
+          created_at: string | null
+          cumulative_contributions_base: number | null
+          notes: string | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          baseline_date?: string | null
+          baseline_id?: string | null
+          created_at?: string | null
+          cumulative_contributions_base?: number | null
+          notes?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          baseline_date?: string | null
+          baseline_id?: string | null
+          created_at?: string | null
+          cumulative_contributions_base?: number | null
+          notes?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_contribution_baselines_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1580,6 +1691,15 @@ export type Database = {
           p_market_value_base?: number
           p_notes?: string
           p_snapshot_date: string
+        }
+        Returns: string
+      }
+      upsert_contribution_baseline: {
+        Args: {
+          p_baseline_date: string
+          p_cumulative_contributions_base: number
+          p_notes?: string
+          p_workspace_id: string
         }
         Returns: string
       }

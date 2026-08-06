@@ -176,16 +176,9 @@ function formatDateTime(
 }
 
 function buildReportRunHref(
-  asOfDate: string,
   reportRunId: string,
 ): string {
-  const searchParams =
-    new URLSearchParams({
-      asOf: asOfDate,
-      reportRunId,
-    });
-
-  return `/portfolio/reports/monthly?${searchParams.toString()}`;
+  return `/portfolio/reports/monthly/${reportRunId}`;
 }
 
 function getSecondSaturday(
@@ -817,6 +810,13 @@ export default async function MonthlyReportPage({
           <p className="mt-2 text-sm text-slate-600">
             Workspace: {workspace.name}
           </p>
+
+          <Link
+            href="/portfolio/reports/contributions"
+            className="mt-5 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Manage contribution baseline
+          </Link>
         </header>
 
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1801,8 +1801,7 @@ export default async function MonthlyReportPage({
                     >
                         <Link
                         href={buildReportRunHref(
-                            report.as_of_date,
-                            report.report_run_id,
+                          report.report_run_id,
                         )}
                         className="flex flex-col gap-3 rounded-xl p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                         >

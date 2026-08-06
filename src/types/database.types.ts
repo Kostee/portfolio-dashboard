@@ -590,6 +590,177 @@ export type Database = {
           },
         ]
       }
+      portfolio_report_items: {
+        Row: {
+          account_currency: string
+          account_id: string
+          account_name: string
+          account_type: string
+          asset_class_id: string | null
+          asset_class_name: string | null
+          asset_class_sort_order: number | null
+          created_at: string
+          currency: string
+          id: string
+          instrument_id: string
+          instrument_kind: string
+          instrument_name: string
+          instrument_ticker: string | null
+          item_type: string
+          market_value: number
+          market_value_base: number
+          owner_id: string
+          owner_name: string
+          provider_id: string
+          provider_name: string
+          quantity: number | null
+          report_run_id: string
+          source_snapshot_date: string
+          source_snapshot_id: string
+          tracking_mode: string
+          unit_price: number | null
+          workspace_id: string
+        }
+        Insert: {
+          account_currency: string
+          account_id: string
+          account_name: string
+          account_type: string
+          asset_class_id?: string | null
+          asset_class_name?: string | null
+          asset_class_sort_order?: number | null
+          created_at?: string
+          currency: string
+          id?: string
+          instrument_id: string
+          instrument_kind: string
+          instrument_name: string
+          instrument_ticker?: string | null
+          item_type: string
+          market_value: number
+          market_value_base: number
+          owner_id: string
+          owner_name: string
+          provider_id: string
+          provider_name: string
+          quantity?: number | null
+          report_run_id: string
+          source_snapshot_date: string
+          source_snapshot_id: string
+          tracking_mode: string
+          unit_price?: number | null
+          workspace_id: string
+        }
+        Update: {
+          account_currency?: string
+          account_id?: string
+          account_name?: string
+          account_type?: string
+          asset_class_id?: string | null
+          asset_class_name?: string | null
+          asset_class_sort_order?: number | null
+          created_at?: string
+          currency?: string
+          id?: string
+          instrument_id?: string
+          instrument_kind?: string
+          instrument_name?: string
+          instrument_ticker?: string | null
+          item_type?: string
+          market_value?: number
+          market_value_base?: number
+          owner_id?: string
+          owner_name?: string
+          provider_id?: string
+          provider_name?: string
+          quantity?: number | null
+          report_run_id?: string
+          source_snapshot_date?: string
+          source_snapshot_id?: string
+          tracking_mode?: string
+          unit_price?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_report_items_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_monthly_report_history"
+            referencedColumns: ["report_run_id"]
+          },
+          {
+            foreignKeyName: "portfolio_report_items_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_report_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_report_items_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_report_runs: {
+        Row: {
+          as_of_date: string
+          base_currency: string
+          created_at: string
+          created_by: string | null
+          generated_at: string | null
+          id: string
+          item_count: number
+          prepared_at: string
+          report_type: string
+          revision: number
+          status: string
+          total_value_base: number
+          workspace_id: string
+        }
+        Insert: {
+          as_of_date: string
+          base_currency: string
+          created_at?: string
+          created_by?: string | null
+          generated_at?: string | null
+          id?: string
+          item_count?: number
+          prepared_at?: string
+          report_type: string
+          revision: number
+          status?: string
+          total_value_base?: number
+          workspace_id: string
+        }
+        Update: {
+          as_of_date?: string
+          base_currency?: string
+          created_at?: string
+          created_by?: string | null
+          generated_at?: string | null
+          id?: string
+          item_count?: number
+          prepared_at?: string
+          report_type?: string
+          revision?: number
+          status?: string
+          total_value_base?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_report_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       position_snapshots: {
         Row: {
           account_id: string
@@ -1066,6 +1237,56 @@ export type Database = {
           },
         ]
       }
+      portfolio_monthly_report_history: {
+        Row: {
+          as_of_date: string | null
+          base_currency: string | null
+          created_at: string | null
+          generated_at: string | null
+          item_count: number | null
+          prepared_at: string | null
+          report_run_id: string | null
+          revision: number | null
+          status: string | null
+          total_value_base: number | null
+          workspace_id: string | null
+        }
+        Insert: {
+          as_of_date?: string | null
+          base_currency?: string | null
+          created_at?: string | null
+          generated_at?: string | null
+          item_count?: number | null
+          prepared_at?: string | null
+          report_run_id?: string | null
+          revision?: number | null
+          status?: string | null
+          total_value_base?: number | null
+          workspace_id?: string | null
+        }
+        Update: {
+          as_of_date?: string | null
+          base_currency?: string | null
+          created_at?: string | null
+          generated_at?: string | null
+          item_count?: number | null
+          prepared_at?: string | null
+          report_run_id?: string | null
+          revision?: number | null
+          status?: string | null
+          total_value_base?: number | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_report_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_operation_legs: {
         Row: {
           account_base_currency: string | null
@@ -1206,6 +1427,10 @@ export type Database = {
           p_operation_time?: string
           p_to_account_id: string
         }
+        Returns: string
+      }
+      create_monthly_report_run: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
         Returns: string
       }
       create_opening_cash_balance: {

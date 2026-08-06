@@ -9,9 +9,9 @@ import {
   isValidIsoDate,
 } from "../../operations/form-helpers";
 import {
-  completeMonthlyReportReview,
   confirmMonthlyReportedSnapshot,
   confirmMonthlyUnitSnapshot,
+  createMonthlyReportSnapshot,
   saveMonthlyReportedSnapshot,
   saveMonthlyUnitSnapshot,
 } from "./actions";
@@ -21,6 +21,7 @@ type MonthlyReportPageProps = {
     asOf?: string;
     error?: string;
     success?: string;
+    reportRunId?: string;
   }>;
 };
 
@@ -34,27 +35,41 @@ type Account = Pick<
   | "account_type"
 >;
 
-type Instrument = Pick<
-  Database["public"]["Tables"]["instruments"]["Row"],
-  | "id"
-  | "name"
-  | "ticker"
-  | "asset_class_id"
-  | "instrument_kind"
-  | "tracking_mode"
-  | "default_currency"
->;
-
-type AssetClass = Pick<
-  Database["public"]["Tables"]["asset_classes"]["Row"],
-  "id" | "name" | "sort_order"
->;
-
 type UnitPosition =
   Database["public"]["Functions"]["get_portfolio_unit_positions_as_of"]["Returns"][number];
 
 type ReportedBalance =
   Database["public"]["Functions"]["get_portfolio_reported_balances_as_of"]["Returns"][number];
+
+type ReportRun = Pick<
+  Database["public"]["Tables"]["portfolio_report_runs"]["Row"],
+  | "id"
+  | "as_of_date"
+  | "revision"
+  | "status"
+  | "base_currency"
+  | "item_count"
+  | "total_value_base"
+  | "prepared_at"
+  | "generated_at"
+>;
+
+type ReportItem = Pick<
+  Database["public"]["Tables"]["portfolio_report_items"]["Row"],
+  | "id"
+  | "item_type"
+  | "owner_name"
+  | "provider_name"
+  | "account_name"
+  | "instrument_name"
+  | "instrument_ticker"
+  | "asset_class_name"
+  | "quantity"
+  | "market_value"
+  | "currency"
+  | "market_value_base"
+  | "source_snapshot_date"
+>;
 
 const ERROR_MESSAGES: Record<
   string,
@@ -102,6 +117,8 @@ const ERROR_MESSAGES: Record<
     "The report readiness check failed.",
   report_not_ready:
     "Complete or confirm every required valuation before continuing.",
+  report_snapshot_failed:
+    "The immutable monthly report snapshot could not be created.",
 };
 
 const SUCCESS_MESSAGES: Record<
@@ -118,6 +135,8 @@ const SUCCESS_MESSAGES: Record<
     "The previous reported balance was confirmed for the selected date.",
   review_complete:
     "All required portfolio values are confirmed for this report date.",
+  report_snapshot_created:
+    "The immutable monthly report snapshot was created.",
 };
 
 function formatQuantity(
@@ -136,6 +155,37 @@ function formatAmount(
     minimumFractionDigits: 2,
     maximumFractionDigits: 8,
   }).format(value);
+}
+
+function formatDateTime(
+  value: string | null,
+  timeZone: string,
+): string {
+  if (!value) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone,
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  ).format(new Date(value));
+}
+
+function buildReportRunHref(
+  asOfDate: string,
+  reportRunId: string,
+): string {
+  const searchParams =
+    new URLSearchParams({
+      asOf: asOfDate,
+      reportRunId,
+    });
+
+  return `/portfolio/reports/monthly?${searchParams.toString()}`;
 }
 
 function getSecondSaturday(
@@ -253,6 +303,8 @@ export default async function MonthlyReportPage({
     asOf: requestedAsOfDate,
     error: errorCode,
     success: successCode,
+    reportRunId:
+      selectedReportRunId,
   } = await searchParams;
 
   const today = getDateInTimeZone(
@@ -276,6 +328,7 @@ export default async function MonthlyReportPage({
     assetClassesResult,
     unitPositionsResult,
     reportedBalancesResult,
+    reportHistoryResult,
   ] = await Promise.all([
     supabase
       .from("owners")
@@ -344,7 +397,26 @@ export default async function MonthlyReportPage({
         p_as_of_date: asOfDate,
       },
     ),
-  ]);
+
+    supabase
+      .from(
+          "portfolio_monthly_report_history",
+      )
+      .select(
+        "report_run_id, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at",
+      )
+      .eq(
+          "workspace_id",
+          membership.workspace_id,
+      )
+      .order("as_of_date", {
+          ascending: false,
+      })
+      .order("revision", {
+          ascending: false,
+      })
+      .limit(20),
+    ]);
 
   if (ownersResult.error) {
     console.error(
@@ -395,6 +467,13 @@ export default async function MonthlyReportPage({
     );
   }
 
+  if (reportHistoryResult.error) {
+    console.error(
+      "Monthly report history query failed:",
+      reportHistoryResult.error,
+    );
+  }
+
   const owners =
     ownersResult.data ?? [];
 
@@ -417,6 +496,80 @@ export default async function MonthlyReportPage({
   const reportedBalances =
     (reportedBalancesResult.data ??
       []) as ReportedBalance[];
+
+  const reportHistory =
+    reportHistoryResult.data ?? [];
+
+  let selectedReport:
+    ReportRun | null = null;
+
+  let selectedReportItems:
+    ReportItem[] = [];
+
+  if (selectedReportRunId) {
+    const [
+      selectedReportResult,
+      selectedItemsResult,
+    ] = await Promise.all([
+      supabase
+        .from("portfolio_report_runs")
+        .select(
+          "id, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at",
+        )
+        .eq(
+          "workspace_id",
+          membership.workspace_id,
+        )
+        .eq(
+          "id",
+          selectedReportRunId,
+        )
+        .maybeSingle(),
+
+      supabase
+        .from("portfolio_report_items")
+        .select(
+          "id, item_type, owner_name, provider_name, account_name, instrument_name, instrument_ticker, asset_class_name, quantity, market_value, currency, market_value_base, source_snapshot_date",
+        )
+        .eq(
+          "workspace_id",
+          membership.workspace_id,
+        )
+        .eq(
+          "report_run_id",
+          selectedReportRunId,
+        )
+        .order(
+          "asset_class_sort_order",
+          {
+            ascending: true,
+          },
+        )
+        .order("instrument_name", {
+          ascending: true,
+        }),
+    ]);
+
+    if (selectedReportResult.error) {
+      console.error(
+        "Selected monthly report query failed:",
+        selectedReportResult.error,
+      );
+    }
+
+    if (selectedItemsResult.error) {
+      console.error(
+        "Selected monthly report items query failed:",
+        selectedItemsResult.error,
+      );
+    }
+
+    selectedReport =
+      selectedReportResult.data;
+
+    selectedReportItems =
+      selectedItemsResult.data ?? [];
+  }
 
   const ownerMap = new Map(
     owners.map((owner) => [
@@ -1424,61 +1577,281 @@ export default async function MonthlyReportPage({
         </section>
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">
-                Report source readiness
-              </h2>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                <h2 className="text-xl font-semibold">
+                    Create immutable report source
+                </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                All invested positions and reported
-                balances must have an exact snapshot
-                for {asOfDate}.
-              </p>
-            </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                    All invested positions and PPK balances
+                    must have an exact snapshot for{" "}
+                    {asOfDate}. Cash is not included.
+                </p>
+                </div>
 
-            <form
-              action={
-                completeMonthlyReportReview
-              }
-            >
-              <input
-                type="hidden"
-                name="asOfDate"
-                value={asOfDate}
-              />
-
-              <button
-                type="submit"
-                disabled={!reportReady}
-                className={
-                  reportReady
-                    ? "rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
-                    : "cursor-not-allowed rounded-lg bg-slate-200 px-5 py-2.5 text-sm font-medium text-slate-500"
+                <form
+                action={
+                    createMonthlyReportSnapshot
                 }
-              >
-                {reportReady
-                  ? "Validate report source"
-                  : `Complete ${missingCount} items`}
-              </button>
-            </form>
-          </div>
+                >
+                <input
+                    type="hidden"
+                    name="asOfDate"
+                    value={asOfDate}
+                />
 
-          {successCode ===
-            "review_complete" && (
-            <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
-              <p className="font-medium text-emerald-800">
-                The report source is complete.
-              </p>
-
-              <p className="mt-2 text-sm leading-6 text-emerald-700">
-                The next step will generate the five
-                chart images from these exact dated
-                snapshots.
-              </p>
+                <button
+                    type="submit"
+                    disabled={!reportReady}
+                    className={
+                    reportReady
+                        ? "rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
+                        : "cursor-not-allowed rounded-lg bg-slate-200 px-5 py-2.5 text-sm font-medium text-slate-500"
+                    }
+                >
+                    {reportReady
+                    ? "Create report snapshot"
+                    : `Complete ${missingCount} items`}
+                </button>
+                </form>
             </div>
-          )}
-        </section>
+
+            {reportReady && (
+                <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                Creating another snapshot for the same
+                report date will create a new revision.
+                Earlier revisions remain unchanged.
+                </div>
+            )}
+            </section>
+
+            {selectedReport && (
+            <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <p className="text-sm font-medium uppercase tracking-[0.16em] text-emerald-700">
+                    Frozen monthly report source
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-semibold text-emerald-950">
+                    {selectedReport.as_of_date} · Revision{" "}
+                    {selectedReport.revision}
+                    </h2>
+
+                    <p className="mt-2 text-sm text-emerald-800">
+                    Prepared:{" "}
+                    {formatDateTime(
+                        selectedReport.prepared_at,
+                        workspace.timezone,
+                    )}
+                    </p>
+                </div>
+
+                <span className="w-fit rounded-full bg-white px-3 py-1 text-sm font-medium text-emerald-700">
+                    {selectedReport.status}
+                </span>
+                </div>
+
+                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-white p-4">
+                    <p className="text-xs text-slate-500">
+                    Frozen items
+                    </p>
+
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {selectedReport.item_count}
+                    </p>
+                </div>
+
+                <div className="rounded-xl bg-white p-4 sm:col-span-2">
+                    <p className="text-xs text-slate-500">
+                    Total invested assets
+                    </p>
+
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {formatAmount(
+                        Number(
+                        selectedReport.total_value_base,
+                        ),
+                    )}{" "}
+                    {selectedReport.base_currency}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                    Cash balances excluded
+                    </p>
+                </div>
+                </div>
+
+                <div className="mt-6 rounded-xl bg-white p-5">
+                <h3 className="font-semibold text-slate-900">
+                    Frozen report items
+                </h3>
+
+                <ul className="mt-4 divide-y divide-slate-200">
+                    {selectedReportItems.map(
+                    (item) => (
+                        <li
+                        key={item.id}
+                        className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                        <div>
+                            <p className="font-medium text-slate-900">
+                            {item.instrument_ticker ||
+                                item.instrument_name}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600">
+                            {item.instrument_name}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                            {[
+                                item.owner_name,
+                                item.provider_name,
+                                item.account_name,
+                            ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                            {item.asset_class_name ??
+                                "Unclassified asset"}
+                            {" · Snapshot "}
+                            {item.source_snapshot_date}
+                            {item.quantity !== null &&
+                                ` · Quantity ${formatQuantity(
+                                Number(item.quantity),
+                                )}`}
+                            </p>
+                        </div>
+
+                        <div className="text-left sm:text-right">
+                            <p className="font-semibold text-slate-900">
+                            {formatAmount(
+                                Number(
+                                item.market_value_base,
+                                ),
+                            )}{" "}
+                            {
+                                selectedReport.base_currency
+                            }
+                            </p>
+
+                            {item.currency !==
+                            selectedReport.base_currency && (
+                            <p className="mt-1 text-xs text-slate-500">
+                                {formatAmount(
+                                Number(
+                                    item.market_value,
+                                ),
+                                )}{" "}
+                                {item.currency}
+                            </p>
+                            )}
+                        </div>
+                        </li>
+                    ),
+                    )}
+                </ul>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-emerald-200 bg-white p-4 text-sm leading-6 text-emerald-800">
+                This revision will remain unchanged even if
+                operations, valuations or instrument names
+                are edited later.
+                </div>
+            </section>
+            )}
+
+            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                <h2 className="text-xl font-semibold">
+                    Recent monthly report snapshots
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                    The twenty most recent frozen report
+                    revisions.
+                </p>
+                </div>
+
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                {reportHistory.length}
+                </span>
+            </div>
+
+            {reportHistory.length > 0 ? (
+                <ul className="mt-6 divide-y divide-slate-200">
+                {reportHistory.map((report) => {
+                    if (
+                    !report.report_run_id ||
+                    !report.as_of_date
+                    ) {
+                    return null;
+                    }
+
+                    return (
+                    <li
+                        key={report.report_run_id}
+                        className="py-4 first:pt-0 last:pb-0"
+                    >
+                        <Link
+                        href={buildReportRunHref(
+                            report.as_of_date,
+                            report.report_run_id,
+                        )}
+                        className="flex flex-col gap-3 rounded-xl p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                        <div>
+                            <p className="font-medium text-slate-900">
+                            {report.as_of_date} · Revision{" "}
+                            {report.revision}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                            {formatDateTime(
+                                report.prepared_at,
+                                workspace.timezone,
+                            )}
+                            {" · "}
+                            {report.item_count} items
+                            {" · "}
+                            {report.status}
+                            </p>
+                        </div>
+
+                        <p className="font-semibold text-slate-900">
+                            {formatAmount(
+                            Number(
+                                report.total_value_base ??
+                                0,
+                            ),
+                            )}{" "}
+                            {report.base_currency}
+                        </p>
+                        </Link>
+                    </li>
+                    );
+                })}
+                </ul>
+            ) : (
+                <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
+                <p className="font-medium">
+                    No frozen report snapshots
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Complete all required valuations and
+                    create the first monthly report snapshot.
+                </p>
+                </div>
+            )}
+            </section>
+
       </div>
     </main>
   );

@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 
-type UnitPosition =
-  Database["public"]["Views"]["portfolio_current_unit_positions"]["Row"];
+type ValuedUnitPosition =
+  Database["public"]["Views"]["portfolio_current_valued_unit_positions"]["Row"];
 
 type CashBalance =
   Database["public"]["Views"]["portfolio_current_cash_balances"]["Row"];
@@ -42,8 +42,8 @@ function getAccountDescription(
 }
 
 function sortUnitPositions(
-  positions: UnitPosition[],
-): UnitPosition[] {
+  positions: ValuedUnitPosition[],
+): ValuedUnitPosition[] {
   return [...positions].sort((first, second) => {
     const firstAccount = getAccountDescription(
       first.owner_name,
@@ -150,15 +150,17 @@ export default async function PortfolioStatePage() {
     redirect("/portfolio/login");
   }
 
-  const { data: membership, error: membershipError } =
-    await supabase
-      .from("workspace_members")
-      .select("workspace_id")
-      .order("created_at", {
-        ascending: true,
-      })
-      .limit(1)
-      .maybeSingle();
+  const {
+    data: membership,
+    error: membershipError,
+  } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .order("created_at", {
+      ascending: true,
+    })
+    .limit(1)
+    .maybeSingle();
 
   if (membershipError) {
     console.error(
@@ -184,7 +186,9 @@ export default async function PortfolioStatePage() {
       .single(),
 
     supabase
-      .from("portfolio_current_unit_positions")
+      .from(
+        "portfolio_current_valued_unit_positions",
+      )
       .select("*")
       .eq(
         "workspace_id",
@@ -192,7 +196,9 @@ export default async function PortfolioStatePage() {
       ),
 
     supabase
-      .from("portfolio_current_cash_balances")
+      .from(
+        "portfolio_current_cash_balances",
+      )
       .select("*")
       .eq(
         "workspace_id",
@@ -219,7 +225,7 @@ export default async function PortfolioStatePage() {
 
   if (unitPositionsResult.error) {
     console.error(
-      "Current unit positions query failed:",
+      "Current valued unit positions query failed:",
       unitPositionsResult.error,
     );
   }
@@ -240,6 +246,9 @@ export default async function PortfolioStatePage() {
 
   const workspace = workspaceResult.data;
 
+  const workspaceBaseCurrency =
+    workspace?.base_currency ?? "PLN";
+
   const unitPositions = sortUnitPositions(
     unitPositionsResult.data ?? [],
   );
@@ -251,6 +260,12 @@ export default async function PortfolioStatePage() {
   const reportedBalances =
     sortReportedBalances(
       reportedBalancesResult.data ?? [],
+    );
+
+  const valuedUnitPositions =
+    unitPositions.filter(
+      (position) =>
+        position.snapshot_id !== null,
     );
 
   const negativeUnitPositions =
@@ -273,10 +288,20 @@ export default async function PortfolioStatePage() {
         ) < 0,
     );
 
+  const valuationIssues =
+    unitPositions.filter(
+      (position) =>
+        position.valuation_status ===
+          "quantity_mismatch" ||
+        position.valuation_status ===
+          "missing_quantity",
+    );
+
   const warningCount =
     negativeUnitPositions.length +
     negativeCashBalances.length +
-    negativeReportedBalances.length;
+    negativeReportedBalances.length +
+    valuationIssues.length;
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-900 sm:px-8">
@@ -327,7 +352,7 @@ export default async function PortfolioStatePage() {
           </div>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
               Unit positions
@@ -335,6 +360,16 @@ export default async function PortfolioStatePage() {
 
             <p className="mt-2 text-3xl font-semibold">
               {unitPositions.length}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">
+              Valued positions
+            </p>
+
+            <p className="mt-2 text-3xl font-semibold">
+              {valuedUnitPositions.length}
             </p>
           </div>
 
@@ -382,17 +417,19 @@ export default async function PortfolioStatePage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-amber-800">
-              Negative positions or cash balances
-              usually mean that an opening balance
-              or an earlier operation has not yet
-              been entered.
+              Negative balances usually mean that
+              an opening balance or an earlier
+              operation is missing. A valuation
+              mismatch means that the latest
+              snapshot quantity differs from the
+              current ledger quantity.
             </p>
 
             <div className="mt-4 space-y-2">
               {negativeUnitPositions.map(
                 (position) => (
                   <p
-                    key={`${position.account_id}-${position.instrument_id}`}
+                    key={`negative-units-${position.account_id}-${position.instrument_id}`}
                     className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
                   >
                     Negative units:{" "}
@@ -417,7 +454,7 @@ export default async function PortfolioStatePage() {
               {negativeCashBalances.map(
                 (balance) => (
                   <p
-                    key={`${balance.account_id}-${balance.currency}`}
+                    key={`negative-cash-${balance.account_id}-${balance.currency}`}
                     className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
                   >
                     Negative cash:{" "}
@@ -441,7 +478,7 @@ export default async function PortfolioStatePage() {
               {negativeReportedBalances.map(
                 (balance) => (
                   <p
-                    key={`${balance.account_id}-${balance.instrument_id}`}
+                    key={`negative-reported-${balance.account_id}-${balance.instrument_id}`}
                     className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
                   >
                     Negative reported balance:{" "}
@@ -462,17 +499,62 @@ export default async function PortfolioStatePage() {
                   </p>
                 ),
               )}
+
+              {valuationIssues.map(
+                (position) => {
+                  const currentQuantity =
+                    Number(
+                      position.quantity ?? 0,
+                    );
+
+                  const snapshotQuantity =
+                    position.valuation_quantity ===
+                    null
+                      ? null
+                      : Number(
+                          position.valuation_quantity,
+                        );
+
+                  return (
+                    <p
+                      key={`valuation-${position.account_id}-${position.instrument_id}`}
+                      className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
+                    >
+                      Valuation quantity issue:{" "}
+                      {getAccountDescription(
+                        position.owner_name,
+                        position.provider_name,
+                        position.account_name,
+                      )}{" "}
+                      ·{" "}
+                      {position.instrument_ticker ||
+                        position.instrument_name}{" "}
+                      · ledger{" "}
+                      {formatQuantity(
+                        currentQuantity,
+                      )}
+                      {" · snapshot "}
+                      {snapshotQuantity === null
+                        ? "missing"
+                        : formatQuantity(
+                            snapshotQuantity,
+                          )}
+                    </p>
+                  );
+                },
+              )}
             </div>
           </section>
         ) : (
           <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
             <h2 className="text-lg font-semibold text-emerald-900">
-              No negative balances
+              No consistency warnings
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-emerald-800">
-              All calculated positions and balances
-              are currently non-negative.
+              All calculated balances are
+              non-negative and valuation quantities
+              match their current ledger positions.
             </p>
           </section>
         )}
@@ -486,8 +568,9 @@ export default async function PortfolioStatePage() {
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Quantities calculated from all
-                  posted operation entries.
+                  Current ledger quantities combined
+                  with the latest available
+                  account-specific valuation.
                 </p>
               </div>
 
@@ -498,59 +581,216 @@ export default async function PortfolioStatePage() {
 
             {unitPositions.length > 0 ? (
               <ul className="mt-6 divide-y divide-slate-200">
-                {unitPositions.map((position) => {
-                  const quantity = Number(
-                    position.quantity ?? 0,
-                  );
+                {unitPositions.map(
+                  (position) => {
+                    const quantity = Number(
+                      position.quantity ?? 0,
+                    );
 
-                  return (
-                    <li
-                      key={`${position.account_id}-${position.instrument_id}`}
-                      className="py-4 first:pt-0 last:pb-0"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-medium">
-                            {position.instrument_ticker ||
-                              position.instrument_name}
-                          </p>
+                    const hasValuation =
+                      position.snapshot_id !== null;
 
-                          <p className="mt-1 text-sm text-slate-600">
-                            {position.instrument_name}
-                          </p>
+                    const valuationMarketValue =
+                      position
+                        .valuation_market_value ===
+                      null
+                        ? null
+                        : Number(
+                            position
+                              .valuation_market_value,
+                          );
 
-                          <p className="mt-1 text-xs text-slate-500">
-                            {getAccountDescription(
-                              position.owner_name,
-                              position.provider_name,
-                              position.account_name,
-                            )}
-                          </p>
+                    const valuationBaseValue =
+                      position
+                        .valuation_market_value_base ===
+                      null
+                        ? null
+                        : Number(
+                            position
+                              .valuation_market_value_base,
+                          );
+
+                    const valuationUnitPrice =
+                      position
+                        .valuation_unit_price ===
+                      null
+                        ? null
+                        : Number(
+                            position
+                              .valuation_unit_price,
+                          );
+
+                    const valuationQuantity =
+                      position
+                        .valuation_quantity === null
+                        ? null
+                        : Number(
+                            position
+                              .valuation_quantity,
+                          );
+
+                    const valuationMatched =
+                      position.valuation_status ===
+                      "matched";
+
+                    return (
+                      <li
+                        key={`${position.account_id}-${position.instrument_id}`}
+                        className="py-5 first:pt-0 last:pb-0"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-medium">
+                              {position.instrument_ticker ||
+                                position.instrument_name}
+                            </p>
+
+                            <p className="mt-1 text-sm text-slate-600">
+                              {
+                                position.instrument_name
+                              }
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {getAccountDescription(
+                                position.owner_name,
+                                position.provider_name,
+                                position.account_name,
+                              )}
+                            </p>
+                          </div>
+
+                          <span
+                            className={
+                              quantity >= 0
+                                ? "w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
+                                : "w-fit rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700"
+                            }
+                          >
+                            {quantity >= 0 ? "+" : ""}
+                            {formatQuantity(quantity)}
+                          </span>
                         </div>
 
-                        <span
-                          className={
-                            quantity >= 0
-                              ? "w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
-                              : "w-fit rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700"
-                          }
-                        >
-                          {quantity >= 0 ? "+" : ""}
-                          {formatQuantity(quantity)}
-                        </span>
-                      </div>
+                        {hasValuation &&
+                        valuationMarketValue !==
+                          null ? (
+                          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                                  Latest valuation
+                                </p>
 
-                      <p className="mt-3 text-xs text-slate-500">
-                        Activity:{" "}
-                        {position.first_activity_date ??
-                          "—"}{" "}
-                        →{" "}
-                        {position.last_activity_date ??
-                          "—"}
-                      </p>
-                    </li>
-                  );
-                })}
+                                <p className="mt-2 text-xl font-semibold text-slate-900">
+                                  {formatAmount(
+                                    valuationMarketValue,
+                                  )}{" "}
+                                  {
+                                    position.valuation_currency
+                                  }
+                                </p>
+
+                                {valuationBaseValue !==
+                                  null &&
+                                  position.valuation_currency !==
+                                    workspaceBaseCurrency && (
+                                    <p className="mt-1 text-sm text-slate-600">
+                                      {formatAmount(
+                                        valuationBaseValue,
+                                      )}{" "}
+                                      {
+                                        workspaceBaseCurrency
+                                      }
+                                    </p>
+                                  )}
+                              </div>
+
+                              <span
+                                className={
+                                  valuationMatched
+                                    ? "w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                                    : "w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
+                                }
+                              >
+                                {valuationMatched
+                                  ? "Quantity matched"
+                                  : "Quantity mismatch"}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                              <p>
+                                Valuation date:{" "}
+                                {position.valuation_date ??
+                                  "—"}
+                              </p>
+
+                              <p>
+                                Snapshot quantity:{" "}
+                                {valuationQuantity ===
+                                null
+                                  ? "—"
+                                  : formatQuantity(
+                                      valuationQuantity,
+                                    )}
+                              </p>
+
+                              <p>
+                                Unit price:{" "}
+                                {valuationUnitPrice ===
+                                null
+                                  ? "—"
+                                  : `${formatAmount(
+                                      valuationUnitPrice,
+                                    )} ${
+                                      position.valuation_currency ??
+                                      ""
+                                    }`}
+                              </p>
+
+                              <p>
+                                Source:{" "}
+                                {position.valuation_source ??
+                                  "—"}
+                              </p>
+                            </div>
+
+                            {position.valuation_notes && (
+                              <p className="mt-3 text-xs text-slate-500">
+                                {
+                                  position.valuation_notes
+                                }
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+                            <p className="text-sm font-medium text-slate-700">
+                              No valuation yet
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                              Add an account-specific
+                              position snapshot to
+                              store the current market
+                              value.
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="mt-3 text-xs text-slate-500">
+                          Activity:{" "}
+                          {position.first_activity_date ??
+                            "—"}{" "}
+                          →{" "}
+                          {position.last_activity_date ??
+                            "—"}
+                        </p>
+                      </li>
+                    );
+                  },
+                )}
               </ul>
             ) : (
               <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
@@ -608,7 +848,9 @@ export default async function PortfolioStatePage() {
 
                           <p className="mt-1 text-xs text-slate-500">
                             Account currency:{" "}
-                            {balance.account_currency}
+                            {
+                              balance.account_currency
+                            }
                           </p>
                         </div>
 
@@ -622,7 +864,9 @@ export default async function PortfolioStatePage() {
                           {cashBalance >= 0
                             ? "+"
                             : ""}
-                          {formatAmount(cashBalance)}{" "}
+                          {formatAmount(
+                            cashBalance,
+                          )}{" "}
                           {balance.currency}
                         </span>
                       </div>
@@ -662,9 +906,9 @@ export default async function PortfolioStatePage() {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Latest calculated balances for
-                assets tracked as reported values,
-                such as PPK.
+                Latest dated snapshots for assets
+                tracked as reported values, such as
+                PPK.
               </p>
             </div>
 
@@ -713,6 +957,12 @@ export default async function PortfolioStatePage() {
                         reportedBalance,
                       )}{" "}
                       {balance.currency}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Latest snapshot:{" "}
+                      {balance.last_activity_date ??
+                        "—"}
                     </p>
                   </li>
                 );

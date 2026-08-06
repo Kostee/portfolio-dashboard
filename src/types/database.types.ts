@@ -829,6 +829,56 @@ export type Database = {
           },
         ]
       }
+      portfolio_current_valued_unit_positions: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          first_activity_date: string | null
+          instrument_currency: string | null
+          instrument_exchange: string | null
+          instrument_id: string | null
+          instrument_name: string | null
+          instrument_ticker: string | null
+          last_activity_date: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          quantity: number | null
+          snapshot_id: string | null
+          valuation_currency: string | null
+          valuation_date: string | null
+          valuation_fx_rate_to_base: number | null
+          valuation_market_value: number | null
+          valuation_market_value_base: number | null
+          valuation_notes: string | null
+          valuation_quantity: number | null
+          valuation_quantity_difference: number | null
+          valuation_source:
+            | Database["public"]["Enums"]["portfolio_data_source"]
+            | null
+          valuation_status: string | null
+          valuation_unit_price: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_operation_entries_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_operation_entries_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       portfolio_latest_position_snapshots: {
         Row: {
           account_currency: string | null

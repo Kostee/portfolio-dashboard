@@ -6,15 +6,15 @@ import {
 } from "react";
 
 import type {
-  InstrumentChartItem,
+  AccountChartItem,
 } from "@/lib/reports/monthly-chart-data";
 
 import {
   exportSvgAsPng,
 } from "@/lib/charts/export-svg-as-png";
 
-type GpwPortfolioChartProps = {
-  items: InstrumentChartItem[];
+type AssetsByAccountChartProps = {
+  items: AccountChartItem[];
   totalValueBase: number;
 
   asOfDate: string;
@@ -23,30 +23,16 @@ type GpwPortfolioChartProps = {
 };
 
 const CHART_WIDTH = 1500;
+const CHART_HEIGHT = 900;
 
 function formatAmount(
   value: number,
-  fractionDigits = 0,
 ): string {
   return new Intl.NumberFormat(
     "pl-PL",
     {
-      minimumFractionDigits:
-        fractionDigits,
-      maximumFractionDigits:
-        fractionDigits,
-    },
-  ).format(value);
-}
-
-function formatQuantity(
-  value: number,
-): string {
-  return new Intl.NumberFormat(
-    "en-GB",
-    {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 8,
+      maximumFractionDigits: 0,
     },
   ).format(value);
 }
@@ -108,13 +94,92 @@ function calculateAxisMaximum(
   return niceFraction * magnitude;
 }
 
-export function GpwPortfolioChart({
+function getAccountColor(
+  item: AccountChartItem,
+): string {
+  const ownerName =
+    item.ownerName.toLowerCase();
+
+  const accountType =
+    item.accountType.toLowerCase();
+
+  const accountName =
+    item.accountName.toLowerCase();
+
+  if (
+    accountType.includes(
+      "government",
+    ) ||
+    accountName.includes("bond")
+  ) {
+    return "#8D99AE";
+  }
+
+  if (
+    accountType.includes("crypto") ||
+    accountName.includes("crypto")
+  ) {
+    return "#F2A900";
+  }
+
+  if (
+    accountType.includes("ppk")
+  ) {
+    return ownerName.includes(
+      "natalia",
+    )
+      ? "#71C39A"
+      : "#7C72E6";
+  }
+
+  if (
+    ownerName.includes("natalia")
+  ) {
+    if (
+      accountType.includes("ike")
+    ) {
+      return "#168A65";
+    }
+
+    if (
+      accountType.includes("ikze")
+    ) {
+      return "#28B889";
+    }
+
+    return "#4EBE9F";
+  }
+
+  if (
+    accountType.includes("ike")
+  ) {
+    return "#3157C8";
+  }
+
+  if (
+    accountType.includes("ikze")
+  ) {
+    return "#4B7ED8";
+  }
+
+  if (
+    accountType.includes(
+      "broker",
+    )
+  ) {
+    return "#5E93DA";
+  }
+
+  return "#64748B";
+}
+
+export function AssetsByAccountChart({
   items,
   totalValueBase,
   asOfDate,
   revision,
   baseCurrency,
-}: GpwPortfolioChartProps) {
+}: AssetsByAccountChartProps) {
   const svgRef =
     useRef<SVGSVGElement>(
       null,
@@ -132,25 +197,20 @@ export function GpwPortfolioChart({
     string | null
   >(null);
 
-  const rowHeight = 56;
-  const topMargin = 130;
-  const bottomMargin = 105;
-  const leftMargin = 325;
-  const rightMargin = 285;
-
-  const chartHeight =
-    Math.max(
-      700,
-      topMargin +
-        bottomMargin +
-        items.length *
-          rowHeight,
-    );
+  const topMargin = 145;
+  const bottomMargin = 220;
+  const leftMargin = 150;
+  const rightMargin = 70;
 
   const plotWidth =
     CHART_WIDTH -
     leftMargin -
     rightMargin;
+
+  const plotHeight =
+    CHART_HEIGHT -
+    topMargin -
+    bottomMargin;
 
   const maximumValue =
     Math.max(
@@ -166,7 +226,7 @@ export function GpwPortfolioChart({
       maximumValue,
     );
 
-  const tickCount = 6;
+  const tickCount = 7;
 
   const ticks =
     Array.from(
@@ -179,6 +239,18 @@ export function GpwPortfolioChart({
           axisMaximum *
           index
         ) / tickCount,
+    );
+
+  const slotWidth =
+    items.length > 0
+      ? plotWidth /
+        items.length
+      : plotWidth;
+
+  const barWidth =
+    Math.min(
+      105,
+      slotWidth * 0.62,
     );
 
   async function handleDownload() {
@@ -195,15 +267,16 @@ export function GpwPortfolioChart({
     try {
       await exportSvgAsPng({
         svg,
+
         width: CHART_WIDTH,
-        height: chartHeight,
+        height: CHART_HEIGHT,
 
         filename:
-            `GPW_${asOfDate}_revision-${revision}.png`,
-        });
+          `ACCOUNTS_${asOfDate}_revision-${revision}.png`,
+      });
     } catch (error) {
       console.error(
-        "GPW chart export failed:",
+        "Assets-by-account chart export failed:",
         error,
       );
 
@@ -219,24 +292,18 @@ export function GpwPortfolioChart({
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">
-          PNG resolution:{" "}
-          {CHART_WIDTH * 2} ×{" "}
-          {chartHeight * 2}
+          PNG resolution: 3000 × 1800
         </p>
 
         <button
           type="button"
-          onClick={
-            handleDownload
-          }
-          disabled={
-            isDownloading
-          }
+          onClick={handleDownload}
+          disabled={isDownloading}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:bg-slate-400"
         >
           {isDownloading
             ? "Generating PNG…"
-            : "Download GPW chart"}
+            : "Download account chart"}
         </button>
       </div>
 
@@ -250,14 +317,14 @@ export function GpwPortfolioChart({
         <svg
           ref={svgRef}
           xmlns="http://www.w3.org/2000/svg"
-          viewBox={`0 0 ${CHART_WIDTH} ${chartHeight}`}
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           role="img"
-          aria-label={`Polish stock portfolio structure as of ${asOfDate}`}
+          aria-label={`Invested assets by account as of ${asOfDate}`}
           className="block min-w-[900px] w-full"
         >
           <rect
             width={CHART_WIDTH}
-            height={chartHeight}
+            height={CHART_HEIGHT}
             fill="#ffffff"
           />
 
@@ -277,7 +344,7 @@ export function GpwPortfolioChart({
             fontWeight={600}
             fill="#0f172a"
           >
-            GPW portfolio structure:{" "}
+            Assets by account:{" "}
             {formatAmount(
               totalValueBase,
             )}{" "}
@@ -292,163 +359,134 @@ export function GpwPortfolioChart({
             fontSize={17}
             fill="#64748b"
           >
-            Cash balances excluded ·
+            Invested assets only · cash excluded ·
             revision {revision}
           </text>
 
-          {ticks.map(
-            (tick) => {
-              const x =
+          {ticks.map((tick) => {
+            const y =
+              topMargin +
+              plotHeight -
+              (
+                tick /
+                axisMaximum
+              ) *
+                plotHeight;
+
+            return (
+              <g key={tick}>
+                <line
+                  x1={leftMargin}
+                  y1={y}
+                  x2={
+                    CHART_WIDTH -
+                    rightMargin
+                  }
+                  y2={y}
+                  stroke="#cbd5e1"
+                  strokeWidth={1}
+                  strokeDasharray="6 5"
+                />
+
+                <text
+                  x={leftMargin - 16}
+                  y={y + 6}
+                  textAnchor="end"
+                  fontSize={17}
+                  fill="#475569"
+                >
+                  {formatAmount(tick)}{" "}
+                  {baseCurrency}
+                </text>
+              </g>
+            );
+          })}
+
+          {items.map(
+            (item, index) => {
+              const centerX =
                 leftMargin +
+                index *
+                  slotWidth +
+                slotWidth / 2;
+
+              const height =
                 (
-                  tick /
+                  item.marketValueBase /
                   axisMaximum
                 ) *
-                  plotWidth;
+                plotHeight;
+
+              const x =
+                centerX -
+                barWidth / 2;
+
+              const y =
+                topMargin +
+                plotHeight -
+                height;
+
+              const accountLabel =
+                `${item.ownerName} · ${item.accountName}`;
 
               return (
-                <g
-                  key={tick}
-                >
-                  <line
-                    x1={x}
-                    y1={
-                      topMargin -
-                      16
+                <g key={item.accountId}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={Math.max(2, height)}
+                    rx={3}
+                    fill={
+                      getAccountColor(item)
                     }
-                    x2={x}
-                    y2={
-                      chartHeight -
-                      bottomMargin
-                    }
-                    stroke="#cbd5e1"
-                    strokeWidth={1}
-                    strokeDasharray="6 5"
                   />
 
                   <text
-                    x={x}
-                    y={
-                      chartHeight -
-                      bottomMargin +
-                      34
-                    }
+                    x={centerX}
+                    y={y - 34}
                     textAnchor="middle"
                     fontSize={17}
-                    fill="#475569"
+                    fontWeight={600}
+                    fill="#0f172a"
+                  >
+                    {formatPercentage(
+                      item.percentage,
+                    )}
+                    %
+                  </text>
+
+                  <text
+                    x={centerX}
+                    y={y - 12}
+                    textAnchor="middle"
+                    fontSize={16}
+                    fill="#334155"
                   >
                     {formatAmount(
-                      tick,
+                      item.marketValueBase,
                     )}{" "}
                     {baseCurrency}
                   </text>
-                </g>
-              );
-            },
-          )}
 
-          {items.map(
-            (
-              item,
-              index,
-            ) => {
-              const y =
-                topMargin +
-                index *
-                  rowHeight;
-
-              const barWidth =
-                Math.max(
-                  2,
-                  (
-                    item.marketValueBase /
-                    axisMaximum
-                  ) *
-                    plotWidth,
-                );
-
-              const opacity =
-                Math.max(
-                  0.5,
-                  1 -
-                    index *
-                      0.025,
-                );
-
-              const label =
-                `${
-                  item.instrumentTicker ??
-                  item.instrumentName
-                } [${formatQuantity(
-                  item.quantity,
-                )}]`;
-
-              const valueLabel =
-                `${formatAmount(
-                  item.marketValueBase,
-                )} ${baseCurrency} (${formatPercentage(
-                  item.percentage,
-                )}%)`;
-
-              return (
-                <g
-                  key={
-                    item.instrumentId
-                  }
-                >
                   <text
-                    x={
-                      leftMargin -
-                      20
+                    x={centerX}
+                    y={
+                      topMargin +
+                      plotHeight +
+                      38
                     }
-                    y={y + 23}
                     textAnchor="end"
-                    fontSize={18}
-                    fill="#0f172a"
-                  >
-                    {label}
-                  </text>
-
-                  <rect
-                    x={leftMargin}
-                    y={y}
-                    width={
-                      barWidth
-                    }
-                    height={32}
-                    rx={2}
-                    fill={
-                      item.assetClassColor
-                    }
-                    fillOpacity={
-                      opacity
-                    }
-                  />
-
-                  <text
-                    x={
-                      leftMargin +
-                      barWidth +
-                      14
-                    }
-                    y={y + 23}
                     fontSize={17}
-                    fill="#1e293b"
+                    fill="#0f172a"
+                    transform={`rotate(-28 ${centerX} ${
+                      topMargin +
+                      plotHeight +
+                      38
+                    })`}
                   >
-                    {valueLabel}
+                    {accountLabel}
                   </text>
-
-                  <line
-                    x1={leftMargin}
-                    y1={y + 43}
-                    x2={
-                      CHART_WIDTH -
-                      rightMargin
-                    }
-                    y2={y + 43}
-                    stroke="#e2e8f0"
-                    strokeWidth={1}
-                  />
                 </g>
               );
             },
@@ -457,36 +495,36 @@ export function GpwPortfolioChart({
           <line
             x1={leftMargin}
             y1={
-              chartHeight -
-              bottomMargin
+              topMargin +
+              plotHeight
             }
             x2={
               CHART_WIDTH -
               rightMargin
             }
             y2={
-              chartHeight -
-              bottomMargin
+              topMargin +
+              plotHeight
             }
             stroke="#334155"
             strokeWidth={2}
           />
 
           <text
-            x={
-              leftMargin +
-              plotWidth / 2
-            }
+            x={34}
             y={
-              chartHeight -
-              22
+              topMargin +
+              plotHeight / 2
             }
             textAnchor="middle"
             fontSize={20}
             fill="#0f172a"
+            transform={`rotate(-90 34 ${
+              topMargin +
+              plotHeight / 2
+            })`}
           >
-            Position value (
-            {baseCurrency})
+            Value in {baseCurrency}
           </text>
         </svg>
       </div>

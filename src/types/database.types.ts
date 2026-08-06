@@ -596,12 +596,15 @@ export type Database = {
           account_id: string
           account_name: string
           account_type: string
+          asset_class_code: string | null
+          asset_class_color: string | null
           asset_class_id: string | null
           asset_class_name: string | null
           asset_class_sort_order: number | null
           created_at: string
           currency: string
           id: string
+          instrument_exchange: string | null
           instrument_id: string
           instrument_kind: string
           instrument_name: string
@@ -626,12 +629,15 @@ export type Database = {
           account_id: string
           account_name: string
           account_type: string
+          asset_class_code?: string | null
+          asset_class_color?: string | null
           asset_class_id?: string | null
           asset_class_name?: string | null
           asset_class_sort_order?: number | null
           created_at?: string
           currency: string
           id?: string
+          instrument_exchange?: string | null
           instrument_id: string
           instrument_kind: string
           instrument_name: string
@@ -656,12 +662,15 @@ export type Database = {
           account_id?: string
           account_name?: string
           account_type?: string
+          asset_class_code?: string | null
+          asset_class_color?: string | null
           asset_class_id?: string | null
           asset_class_name?: string | null
           asset_class_sort_order?: number | null
           created_at?: string
           currency?: string
           id?: string
+          instrument_exchange?: string | null
           instrument_id?: string
           instrument_kind?: string
           instrument_name?: string

@@ -31,6 +31,10 @@ import {
   ForeignMarketAssetsChart,
 } from "@/components/reports/monthly/foreign-market-assets-chart";
 
+import {
+  DownloadAllMonthlyChartsButton,
+} from "@/components/reports/monthly/download-all-monthly-charts-button";
+
 type MonthlyReportDetailsPageProps = {
   params: Promise<{
     reportRunId: string;
@@ -351,6 +355,24 @@ export default async function MonthlyReportDetailsPage({
   const report =
     chartData.report;
 
+  const availableChartCount =
+    [
+      chartData.gpw.items.length >
+        0,
+
+      chartData.accounts.items.length >
+        0,
+
+      chartData.assetClasses.items.length >
+        0,
+
+      chartData.history.points.length >
+        0,
+
+      chartData.foreign.groups.length >
+        0,
+    ].filter(Boolean).length;
+
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-7xl">
@@ -382,6 +404,14 @@ export default async function MonthlyReportDetailsPage({
               workspace.timezone,
             )}
           </p>
+
+          <div className="mt-5">
+            <DownloadAllMonthlyChartsButton
+                availableChartCount={
+                availableChartCount
+                }
+            />
+          </div>
         </header>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -785,10 +815,10 @@ export default async function MonthlyReportDetailsPage({
           {!chartData.history
             .contributionsAvailable && (
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              Portfolio-value history is ready.
-              The cumulative contribution series
-              will be added in the next database
-              step before PNG rendering.
+              This report history does not contain
+              frozen cumulative-contribution values.
+              Configure a contribution baseline and
+              create a new report revision.
             </div>
           )}
         </section>

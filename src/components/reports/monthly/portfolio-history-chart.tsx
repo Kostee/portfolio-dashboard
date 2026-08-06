@@ -385,6 +385,11 @@ export function PortfolioHistoryChart({
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           role="img"
           aria-label={`Portfolio value and cumulative contributions through ${asOfDate}`}
+          data-monthly-report-chart="true"
+          data-chart-order="4"
+          data-chart-width={CHART_WIDTH}
+          data-chart-height={CHART_HEIGHT}
+          data-chart-filename={`PORTFOLIO_HISTORY_${asOfDate}_revision-${revision}.png`}
           className="block min-w-[900px] w-full"
         >
           <rect

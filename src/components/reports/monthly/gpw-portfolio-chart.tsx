@@ -253,6 +253,11 @@ export function GpwPortfolioChart({
           viewBox={`0 0 ${CHART_WIDTH} ${chartHeight}`}
           role="img"
           aria-label={`Polish stock portfolio structure as of ${asOfDate}`}
+          data-monthly-report-chart="true"
+          data-chart-order="1"
+          data-chart-width={CHART_WIDTH}
+          data-chart-height={chartHeight}
+          data-chart-filename={`GPW_${asOfDate}_revision-${revision}.png`}
           className="block min-w-[900px] w-full"
         >
           <rect

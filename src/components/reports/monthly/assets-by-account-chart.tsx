@@ -320,6 +320,11 @@ export function AssetsByAccountChart({
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           role="img"
           aria-label={`Invested assets by account as of ${asOfDate}`}
+          data-monthly-report-chart="true"
+          data-chart-order="2"
+          data-chart-width={CHART_WIDTH}
+          data-chart-height={CHART_HEIGHT}
+          data-chart-filename={`ACCOUNTS_${asOfDate}_revision-${revision}.png`}
           className="block min-w-[900px] w-full"
         >
           <rect

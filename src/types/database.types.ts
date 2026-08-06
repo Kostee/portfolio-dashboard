@@ -131,6 +131,69 @@ export type Database = {
           },
         ]
       }
+      cash_balance_snapshots: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          fx_rate_to_base: number | null
+          id: string
+          market_value_base: number | null
+          notes: string | null
+          snapshot_date: string
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          fx_rate_to_base?: number | null
+          id?: string
+          market_value_base?: number | null
+          notes?: string | null
+          snapshot_date: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          fx_rate_to_base?: number | null
+          id?: string
+          market_value_base?: number | null
+          notes?: string | null
+          snapshot_date?: string
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_balance_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_balance_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exchange_channels: {
         Row: {
           created_at: string
@@ -731,6 +794,44 @@ export type Database = {
       }
     }
     Views: {
+      portfolio_cash_balance_snapshot_history: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          amount: number | null
+          created_at: string | null
+          currency: string | null
+          fx_rate_to_base: number | null
+          market_value_base: number | null
+          notes: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          snapshot_date: string | null
+          snapshot_id: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"] | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_balance_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_balance_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_current_cash_balances: {
         Row: {
           account_currency: string | null
@@ -876,6 +977,45 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "instruments"
             referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_latest_cash_balance_snapshots: {
+        Row: {
+          account_currency: string | null
+          account_id: string | null
+          account_name: string | null
+          amount: number | null
+          created_at: string | null
+          currency: string | null
+          first_snapshot_date: string | null
+          fx_rate_to_base: number | null
+          market_value_base: number | null
+          notes: string | null
+          owner_id: string | null
+          owner_name: string | null
+          provider_id: string | null
+          provider_name: string | null
+          snapshot_date: string | null
+          snapshot_id: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"] | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_balance_snapshots_account_workspace_fk"
+            columns: ["workspace_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "cash_balance_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1131,6 +1271,90 @@ export type Database = {
           p_detailed_tracking_start_date?: string
           p_name: string
           p_timezone?: string
+        }
+        Returns: string
+      }
+      get_portfolio_cash_balances_as_of: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: {
+          account_currency: string
+          account_id: string
+          account_name: string
+          as_of_date: string
+          base_cash_balance: number
+          cash_balance: number
+          currency: string
+          first_activity_date: string
+          last_activity_date: string
+          owner_id: string
+          owner_name: string
+          provider_id: string
+          provider_name: string
+          workspace_id: string
+        }[]
+      }
+      get_portfolio_reported_balances_as_of: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: {
+          account_currency: string
+          account_id: string
+          account_name: string
+          as_of_date: string
+          base_reported_balance: number
+          currency: string
+          first_snapshot_date: string
+          instrument_id: string
+          instrument_name: string
+          instrument_ticker: string
+          owner_id: string
+          owner_name: string
+          provider_id: string
+          provider_name: string
+          reported_balance: number
+          snapshot_date: string
+          snapshot_id: string
+          workspace_id: string
+        }[]
+      }
+      get_portfolio_unit_positions_as_of: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: {
+          account_currency: string
+          account_id: string
+          account_name: string
+          as_of_date: string
+          first_activity_date: string
+          instrument_currency: string
+          instrument_exchange: string
+          instrument_id: string
+          instrument_name: string
+          instrument_ticker: string
+          last_activity_date: string
+          owner_id: string
+          owner_name: string
+          provider_id: string
+          provider_name: string
+          quantity: number
+          snapshot_id: string
+          valuation_currency: string
+          valuation_date: string
+          valuation_market_value: number
+          valuation_market_value_base: number
+          valuation_quantity: number
+          valuation_quantity_difference: number
+          valuation_status: string
+          valuation_unit_price: number
+          workspace_id: string
+        }[]
+      }
+      upsert_cash_balance_snapshot: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_currency: string
+          p_market_value_base?: number
+          p_notes?: string
+          p_snapshot_date: string
         }
         Returns: string
       }

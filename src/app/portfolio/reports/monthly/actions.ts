@@ -892,13 +892,12 @@ export async function confirmMonthlyReportedSnapshot(
   );
 }
 
-export async function completeMonthlyReportReview(
+export async function createMonthlyReportSnapshot(
   formData: FormData,
 ) {
   const {
     supabase,
     membership,
-    workspaceBaseCurrency,
   } = await requireEditableWorkspace();
 
   const asOfDate = readText(
@@ -913,163 +912,58 @@ export async function completeMonthlyReportReview(
     );
   }
 
-  const [
-    unitResult,
-    reportedResult,
-    accountsResult,
-    instrumentsResult,
-  ] = await Promise.all([
-    supabase.rpc(
-      "get_portfolio_unit_positions_as_of",
-      {
-        p_workspace_id:
-          membership.workspace_id,
-        p_as_of_date: asOfDate,
-      },
-    ),
-
-    supabase.rpc(
-      "get_portfolio_reported_balances_as_of",
-      {
-        p_workspace_id:
-          membership.workspace_id,
-        p_as_of_date: asOfDate,
-      },
-    ),
-
-    supabase
-      .from("accounts")
-      .select("id, account_type")
-      .eq(
-        "workspace_id",
+  const {
+    data: reportRunId,
+    error,
+  } = await supabase.rpc(
+    "create_monthly_report_run",
+    {
+      p_workspace_id:
         membership.workspace_id,
-      )
-      .eq("is_active", true),
+      p_as_of_date: asOfDate,
+    },
+  );
 
-    supabase
-      .from("instruments")
-      .select(
-        "id, instrument_kind, tracking_mode",
-      )
-      .eq(
-        "workspace_id",
-        membership.workspace_id,
-      )
-      .eq("is_active", true),
-  ]);
-
-  if (
-    unitResult.error ||
-    reportedResult.error ||
-    accountsResult.error ||
-    instrumentsResult.error
-  ) {
+  if (error) {
     console.error(
-      "Monthly report readiness query failed:",
-      {
-        unitError: unitResult.error,
-        reportedError:
-          reportedResult.error,
-        accountsError:
-          accountsResult.error,
-        instrumentsError:
-          instrumentsResult.error,
-      },
+      "Monthly report snapshot creation failed:",
+      error,
     );
 
     redirectWithError(
       asOfDate,
-      "review_failed",
+      "report_snapshot_failed",
     );
   }
 
-  const unitPositions =
-    unitResult.data ?? [];
+  if (!reportRunId) {
+    console.error(
+      "Monthly report snapshot creation returned no ID.",
+    );
 
-  const unitReady =
-    unitPositions.every((position) => {
-      const baseValueReady =
-        position.valuation_currency ===
-          workspaceBaseCurrency ||
-        position
-          .valuation_market_value_base !==
-          null;
+    redirectWithError(
+      asOfDate,
+      "report_snapshot_failed",
+    );
+  }
 
-      return (
-        position.valuation_date ===
-          asOfDate &&
-        position.valuation_status ===
-          "matched" &&
-        position.valuation_market_value !==
-          null &&
-        baseValueReady
-      );
+  revalidatePath(
+    MONTHLY_REPORT_PATH,
+  );
+
+  revalidatePath(
+    "/portfolio/state",
+  );
+
+  const searchParams =
+    new URLSearchParams({
+      asOf: asOfDate,
+      success:
+        "report_snapshot_created",
+      reportRunId,
     });
 
-  const ppkAccounts =
-    (accountsResult.data ?? []).filter(
-      (account) =>
-        account.account_type === "ppk",
-    );
-
-  const ppkInstruments =
-    (instrumentsResult.data ?? []).filter(
-      (instrument) =>
-        instrument.tracking_mode ===
-          "balance" &&
-        instrument.instrument_kind ===
-          "ppk_fund",
-    );
-
-  const reportedBalances =
-    reportedResult.data ?? [];
-
-  const reportedReady =
-    ppkAccounts.every((account) =>
-      ppkInstruments.every(
-        (instrument) => {
-          const balance =
-            reportedBalances.find(
-              (item) =>
-                item.account_id ===
-                  account.id &&
-                item.instrument_id ===
-                  instrument.id,
-            );
-
-          if (!balance) {
-            return false;
-          }
-
-          const baseValueReady =
-            balance.currency ===
-              workspaceBaseCurrency ||
-            balance
-              .base_reported_balance !==
-              null;
-
-          return (
-            balance.snapshot_date ===
-              asOfDate &&
-            balance.reported_balance !==
-              null &&
-            baseValueReady
-          );
-        },
-      ),
-    );
-
-  if (!unitReady || !reportedReady) {
-    redirectWithError(
-      asOfDate,
-      "report_not_ready",
-    );
-  }
-
-  revalidatePath(MONTHLY_REPORT_PATH);
-
-  redirectWithSuccess(
-    asOfDate,
-    "review_complete",
+  redirect(
+    `${MONTHLY_REPORT_PATH}?${searchParams.toString()}`,
   );
 }

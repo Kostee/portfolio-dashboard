@@ -27,6 +27,10 @@ import {
   PortfolioHistoryChart,
 } from "@/components/reports/monthly/portfolio-history-chart";
 
+import {
+  ForeignMarketAssetsChart,
+} from "@/components/reports/monthly/foreign-market-assets-chart";
+
 type MonthlyReportDetailsPageProps = {
   params: Promise<{
     reportRunId: string;
@@ -834,6 +838,29 @@ export default async function MonthlyReportDetailsPage({
               )}
             </div>
           </div>
+
+          {chartData.foreign.groups.length > 0 && (
+            <div className="mt-6">
+                <ForeignMarketAssetsChart
+                groups={
+                    chartData.foreign.groups
+                }
+                totalValueBase={
+                    chartData.foreign
+                    .totalValueBase
+                }
+                asOfDate={
+                    report.asOfDate
+                }
+                revision={
+                    report.revision
+                }
+                baseCurrency={
+                    report.baseCurrency
+                }
+                />
+            </div>
+            )}
 
           {chartData.foreign.groups
             .length > 0 ? (

@@ -11,6 +11,10 @@ import {
   type MonthlyReportRun,
 } from "@/lib/reports/monthly-chart-data";
 
+import {
+  GpwPortfolioChart,
+} from "@/components/reports/monthly/gpw-portfolio-chart";
+
 type MonthlyReportDetailsPageProps = {
   params: Promise<{
     reportRunId: string;
@@ -436,66 +440,71 @@ export default async function MonthlyReportDetailsPage({
         {/* 1. GPW */}
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">
                 Chart 1
-              </p>
+            </p>
 
-              <h2 className="mt-2 text-xl font-semibold">
+            <h2 className="mt-2 text-xl font-semibold">
                 Polish stocks by instrument
-              </h2>
+            </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-slate-600">
                 Positions are aggregated by
                 instrument across accounts.
-              </p>
+            </p>
             </div>
 
             <p className="font-semibold">
-              {formatAmount(
+            {formatAmount(
                 chartData.gpw.totalValueBase,
-              )}{" "}
-              {report.baseCurrency}
+            )}{" "}
+            {report.baseCurrency}
             </p>
-          </div>
+        </div>
 
-          {chartData.gpw.items.length >
-          0 ? (
+        {chartData.gpw.items.length > 0 && (
+            <div className="mt-6">
+            <GpwPortfolioChart
+                items={chartData.gpw.items}
+                totalValueBase={
+                chartData.gpw.totalValueBase
+                }
+                asOfDate={report.asOfDate}
+                revision={report.revision}
+                baseCurrency={report.baseCurrency}
+            />
+            </div>
+        )}
+
+        {chartData.gpw.items.length > 0 ? (
             <ul className="mt-6 divide-y divide-slate-200">
-              {chartData.gpw.items.map(
+            {chartData.gpw.items.map(
                 (item) => (
-                  <PreviewBar
+                <PreviewBar
                     key={item.instrumentId}
                     label={
-                      item.instrumentTicker ??
-                      item.instrumentName
+                    item.instrumentTicker ??
+                    item.instrumentName
                     }
                     description={`${item.instrumentName} · Quantity ${formatQuantity(
-                      item.quantity,
+                    item.quantity,
                     )}`}
-                    value={
-                      item.marketValueBase
-                    }
-                    percentage={
-                      item.percentage
-                    }
-                    currency={
-                      report.baseCurrency
-                    }
-                    color={
-                      item.assetClassColor
-                    }
-                  />
+                    value={item.marketValueBase}
+                    percentage={item.percentage}
+                    currency={report.baseCurrency}
+                    color={item.assetClassColor}
+                />
                 ),
-              )}
+            )}
             </ul>
-          ) : (
+        ) : (
             <p className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-              This frozen report does not
-              contain Polish stocks.
+            This frozen report does not
+            contain Polish stocks.
             </p>
-          )}
+        )}
         </section>
 
         {/* 2. Accounts */}

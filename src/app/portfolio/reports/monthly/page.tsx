@@ -810,6 +810,13 @@ export default async function MonthlyReportPage({
           <p className="mt-2 text-sm text-slate-600">
             Workspace: {workspace.name}
           </p>
+
+          <Link
+            href="/portfolio/reports/contributions"
+            className="mt-5 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Manage contribution baseline
+          </Link>
         </header>
 
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

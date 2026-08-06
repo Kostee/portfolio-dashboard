@@ -215,7 +215,7 @@ export default async function MonthlyReportDetailsPage({
     supabase
       .from("portfolio_report_runs")
       .select(
-        "id, workspace_id, report_type, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at",
+        "id, workspace_id, report_type, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at, contribution_baseline_id, contribution_baseline_date, cumulative_contributions_base"
       )
       .eq(
         "workspace_id",
@@ -254,7 +254,7 @@ export default async function MonthlyReportDetailsPage({
     supabase
       .from("portfolio_report_runs")
       .select(
-        "id, workspace_id, report_type, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at",
+        "id, workspace_id, report_type, as_of_date, revision, status, base_currency, item_count, total_value_base, prepared_at, generated_at, contribution_baseline_id, contribution_baseline_date, cumulative_contributions_base"
       )
       .eq(
         "workspace_id",
@@ -649,12 +649,35 @@ export default async function MonthlyReportDetailsPage({
                       </p>
                     </div>
 
-                    <p className="font-semibold">
-                      {formatAmount(
-                        point.totalValueBase,
-                      )}{" "}
-                      {report.baseCurrency}
-                    </p>
+                    <div className="text-left sm:text-right">
+                        <p className="font-semibold">
+                            {formatAmount(
+                            point.totalValueBase,
+                            )}{" "}
+                            {report.baseCurrency}
+                        </p>
+
+                        {point.cumulativeContributionsBase !==
+                            null && (
+                            <>
+                            <p className="mt-1 text-xs text-slate-500">
+                                Contributions:{" "}
+                                {formatAmount(
+                                point.cumulativeContributionsBase,
+                                )}{" "}
+                                {report.baseCurrency}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                                Gain:{" "}
+                                {formatAmount(
+                                point.portfolioGainBase ?? 0,
+                                )}{" "}
+                                {report.baseCurrency}
+                            </p>
+                          </>
+                        )}
+                    </div>
                   </li>
                 ),
               )}

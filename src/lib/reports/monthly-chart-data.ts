@@ -19,6 +19,9 @@ export type MonthlyReportRun = Pick<
   | "total_value_base"
   | "prepared_at"
   | "generated_at"
+  | "contribution_baseline_id"
+  | "contribution_baseline_date"
+  | "cumulative_contributions_base"
 >;
 
 export type MonthlyReportItem = Pick<
@@ -107,13 +110,8 @@ export type PortfolioHistoryPoint = {
   status: string;
 
   totalValueBase: number;
-
-  /*
-   * This will be populated in the next database step.
-   * The old monthly chart contains both portfolio value
-   * and cumulative external contributions.
-   */
   cumulativeContributionsBase: number | null;
+  portfolioGainBase: number | null;
 };
 
 export type ForeignCurrencyTotal = {
@@ -146,6 +144,10 @@ export type MonthlyChartData = {
 
     totalDifference: number;
     totalMatches: boolean;
+
+    contributionBaselineDate: string | null;
+    cumulativeContributionsBase: number | null;
+    portfolioGainBase: number | null;
   };
 
   gpw: {
@@ -239,6 +241,16 @@ function numberValue(
   value: number | null,
 ): number {
   return Number(value ?? 0);
+}
+
+function optionalNumberValue(
+  value: number | null,
+): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return Number(value);
 }
 
 function calculatePercentage(
@@ -602,20 +614,34 @@ function buildHistoryChart(
           second.as_of_date,
         ),
       )
-      .map((run) => ({
-        reportRunId: run.id,
-        asOfDate: run.as_of_date,
-        revision: run.revision,
-        status: run.status,
-
-        totalValueBase:
+      .map((run) => {
+        const totalValueBase =
           numberValue(
             run.total_value_base,
-          ),
+          );
 
-        cumulativeContributionsBase:
-          null,
-      }));
+        const cumulativeContributionsBase =
+          optionalNumberValue(
+            run.cumulative_contributions_base,
+          );
+
+        return {
+          reportRunId: run.id,
+          asOfDate: run.as_of_date,
+          revision: run.revision,
+          status: run.status,
+
+          totalValueBase,
+          cumulativeContributionsBase,
+
+          portfolioGainBase:
+            cumulativeContributionsBase ===
+            null
+              ? null
+              : totalValueBase -
+                cumulativeContributionsBase,
+        };
+      });
 
   return {
     points,
@@ -779,6 +805,18 @@ export function buildMonthlyChartData({
     calculatedTotalValueBase -
     frozenTotalValueBase;
 
+  const cumulativeContributionsBase =
+    optionalNumberValue(
+      reportRun
+        .cumulative_contributions_base,
+    );
+
+  const portfolioGainBase =
+    cumulativeContributionsBase === null
+      ? null
+      : frozenTotalValueBase -
+        cumulativeContributionsBase;
+
   const gpwItems =
     reportItems.filter(
       (item) =>
@@ -810,6 +848,13 @@ export function buildMonthlyChartData({
       totalMatches:
         Math.abs(totalDifference) <=
         0.01,
+
+      contributionBaselineDate:
+        reportRun
+          .contribution_baseline_date,
+
+      cumulativeContributionsBase,
+      portfolioGainBase,
     },
 
     gpw:

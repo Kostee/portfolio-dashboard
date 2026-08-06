@@ -322,6 +322,11 @@ export function ForeignMarketAssetsChart({
           viewBox={`0 0 ${CHART_WIDTH} ${chartHeight}`}
           role="img"
           aria-label={`Foreign-market assets as of ${asOfDate}`}
+          data-monthly-report-chart="true"
+          data-chart-order="5"
+          data-chart-width={CHART_WIDTH}
+          data-chart-height={chartHeight}
+          data-chart-filename={`FOREIGN_ASSETS_${asOfDate}_revision-${revision}.png`}
           className="block min-w-[950px] w-full"
         >
           <rect

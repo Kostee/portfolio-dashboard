@@ -19,6 +19,10 @@ import {
   AssetsByAccountChart,
 } from "@/components/reports/monthly/assets-by-account-chart";
 
+import {
+  AssetClassStructureChart,
+} from "@/components/reports/monthly/asset-class-structure-chart";
+
 type MonthlyReportDetailsPageProps = {
   params: Promise<{
     reportRunId: string;
@@ -482,30 +486,6 @@ export default async function MonthlyReportDetailsPage({
             </div>
         )}
 
-        {chartData.accounts.items.length >
-            0 && (
-            <div className="mt-6">
-                <AssetsByAccountChart
-                items={
-                    chartData.accounts.items
-                }
-                totalValueBase={
-                    chartData.accounts
-                    .totalValueBase
-                }
-                asOfDate={
-                    report.asOfDate
-                }
-                revision={
-                    report.revision
-                }
-                baseCurrency={
-                    report.baseCurrency
-                }
-                />
-            </div>
-            )}
-
         {chartData.gpw.items.length > 0 ? (
             <ul className="mt-6 divide-y divide-slate-200">
             {chartData.gpw.items.map(
@@ -563,6 +543,30 @@ export default async function MonthlyReportDetailsPage({
             </p>
           </div>
 
+          {chartData.accounts.items.length >
+            0 && (
+            <div className="mt-6">
+                <AssetsByAccountChart
+                items={
+                    chartData.accounts.items
+                }
+                totalValueBase={
+                    chartData.accounts
+                    .totalValueBase
+                }
+                asOfDate={
+                    report.asOfDate
+                }
+                revision={
+                    report.revision
+                }
+                baseCurrency={
+                    report.baseCurrency
+                }
+                />
+            </div>
+          )}
+
           <ul className="mt-6 divide-y divide-slate-200">
             {chartData.accounts.items.map(
               (item) => (
@@ -613,6 +617,30 @@ export default async function MonthlyReportDetailsPage({
               {report.baseCurrency}
             </p>
           </div>
+
+          {chartData.assetClasses.items.length >
+            0 && (
+            <div className="mt-6">
+                <AssetClassStructureChart
+                items={
+                    chartData.assetClasses.items
+                }
+                totalValueBase={
+                    chartData.assetClasses
+                    .totalValueBase
+                }
+                asOfDate={
+                    report.asOfDate
+                }
+                revision={
+                    report.revision
+                }
+                baseCurrency={
+                    report.baseCurrency
+                }
+                />
+            </div>
+            )}
 
           <ul className="mt-6 divide-y divide-slate-200">
             {chartData.assetClasses.items.map(

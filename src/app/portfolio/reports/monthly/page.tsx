@@ -176,16 +176,9 @@ function formatDateTime(
 }
 
 function buildReportRunHref(
-  asOfDate: string,
   reportRunId: string,
 ): string {
-  const searchParams =
-    new URLSearchParams({
-      asOf: asOfDate,
-      reportRunId,
-    });
-
-  return `/portfolio/reports/monthly?${searchParams.toString()}`;
+  return `/portfolio/reports/monthly/${reportRunId}`;
 }
 
 function getSecondSaturday(
@@ -1801,8 +1794,7 @@ export default async function MonthlyReportPage({
                     >
                         <Link
                         href={buildReportRunHref(
-                            report.as_of_date,
-                            report.report_run_id,
+                          report.report_run_id,
                         )}
                         className="flex flex-col gap-3 rounded-xl p-3 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                         >

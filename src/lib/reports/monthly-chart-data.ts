@@ -9,6 +9,9 @@ type ReportItemRow =
 type XirrSnapshotRow =
   Database["public"]["Tables"]["portfolio_xirr_snapshots"]["Row"];
 
+type PortfolioValueHistoryRow =
+  Database["public"]["Tables"]["portfolio_value_history_points"]["Row"];
+
 export type MonthlyReportRun = Pick<
   ReportRunRow,
   | "id"
@@ -59,6 +62,13 @@ export type MonthlyReportItem = Pick<
   | "market_value_base"
 >;
 
+export type InstrumentOwnerBreakdown = {
+  ownerId: string;
+  ownerName: string;
+  marketValueBase: number;
+  percentage: number;
+};
+
 export type InstrumentChartItem = {
   instrumentId: string;
   instrumentName: string;
@@ -76,6 +86,8 @@ export type InstrumentChartItem = {
   currency: string;
   marketValueBase: number;
   percentage: number;
+
+  ownerBreakdown: InstrumentOwnerBreakdown[];
 };
 
 export type AccountChartItem = {
@@ -142,11 +154,25 @@ export type FrozenXirrSummary = {
   calculationVersion: string;
 };
 
+export type PortfolioValueHistoryRecord = Pick<
+  PortfolioValueHistoryRow,
+  | "id"
+  | "workspace_id"
+  | "as_of_date"
+  | "total_value_base"
+  | "cumulative_contributions_base"
+  | "base_currency"
+  | "source"
+  | "notes"
+>;
+
 export type PortfolioHistoryPoint = {
-  reportRunId: string;
+  historyPointId: string;
+  reportRunId: string | null;
   asOfDate: string;
-  revision: number;
+  revision: number | null;
   status: string;
+  source: "historical" | "report";
 
   totalValueBase: number;
   cumulativeContributionsBase: number | null;
@@ -225,7 +251,14 @@ type BuildMonthlyChartDataInput = {
   reportRun: MonthlyReportRun;
   reportItems: MonthlyReportItem[];
   historyRuns: MonthlyReportRun[];
+  legacyHistoryPoints: PortfolioValueHistoryRecord[];
   xirrSnapshots: MonthlyXirrSnapshot[];
+};
+
+type MutableInstrumentOwner = {
+  ownerId: string;
+  ownerName: string;
+  marketValueBase: number;
 };
 
 type MutableInstrumentGroup = {
@@ -244,6 +277,11 @@ type MutableInstrumentGroup = {
   marketValue: number;
   currency: string;
   marketValueBase: number;
+
+  ownerMarketValues: Map<
+    string,
+    MutableInstrumentOwner
+  >;
 };
 
 type MutableAccountGroup = {
@@ -322,6 +360,37 @@ function sumBaseValue(
   );
 }
 
+function addInstrumentOwnerValue(
+  group: MutableInstrumentGroup,
+  item: MonthlyReportItem,
+): void {
+  const ownerValue =
+    numberValue(
+      item.market_value_base,
+    );
+
+  const existingOwner =
+    group.ownerMarketValues.get(
+      item.owner_id,
+    );
+
+  if (existingOwner) {
+    existingOwner.marketValueBase +=
+      ownerValue;
+
+    return;
+  }
+
+  group.ownerMarketValues.set(
+    item.owner_id,
+    {
+      ownerId: item.owner_id,
+      ownerName: item.owner_name,
+      marketValueBase: ownerValue,
+    },
+  );
+}
+
 function aggregateInstruments(
   items: MonthlyReportItem[],
 ): MutableInstrumentGroup[] {
@@ -347,10 +416,15 @@ function aggregateInstruments(
           item.market_value_base,
         );
 
+      addInstrumentOwnerValue(
+        existing,
+        item,
+      );
+
       continue;
     }
 
-    groups.set(item.instrument_id, {
+    const group: MutableInstrumentGroup = {
       instrumentId:
         item.instrument_id,
 
@@ -394,7 +468,20 @@ function aggregateInstruments(
         numberValue(
           item.market_value_base,
         ),
-    });
+
+      ownerMarketValues:
+        new Map(),
+    };
+
+    addInstrumentOwnerValue(
+      group,
+      item,
+    );
+
+    groups.set(
+      item.instrument_id,
+      group,
+    );
   }
 
   return [...groups.values()];
@@ -417,15 +504,65 @@ function buildInstrumentChartItems(
     );
 
   const chartItems = groups
-    .map((group) => ({
-      ...group,
+    .map((group) => {
+      const ownerBreakdown =
+        [...group.ownerMarketValues.values()]
+          .map((owner) => ({
+            ownerId: owner.ownerId,
+            ownerName: owner.ownerName,
+            marketValueBase:
+              owner.marketValueBase,
+            percentage:
+              calculatePercentage(
+                owner.marketValueBase,
+                group.marketValueBase,
+              ),
+          }))
+          .sort(
+            (first, second) =>
+              second.marketValueBase -
+              first.marketValueBase,
+          );
 
-      percentage:
-        calculatePercentage(
+      return {
+        instrumentId:
+          group.instrumentId,
+        instrumentName:
+          group.instrumentName,
+        instrumentTicker:
+          group.instrumentTicker,
+        instrumentExchange:
+          group.instrumentExchange,
+
+        assetClassId:
+          group.assetClassId,
+        assetClassName:
+          group.assetClassName,
+        assetClassCode:
+          group.assetClassCode,
+        assetClassColor:
+          group.assetClassColor,
+        assetClassSortOrder:
+          group.assetClassSortOrder,
+
+        quantity:
+          group.quantity,
+        marketValue:
+          group.marketValue,
+        currency:
+          group.currency,
+        marketValueBase:
           group.marketValueBase,
-          totalValueBase,
-        ),
-    }))
+
+        percentage:
+          calculatePercentage(
+            group.marketValueBase,
+            totalValueBase,
+          ),
+
+        ownerBreakdown,
+      };
+    })
     .sort(
       (first, second) =>
         second.marketValueBase -
@@ -436,6 +573,84 @@ function buildInstrumentChartItems(
     totalValueBase,
     items: chartItems,
   };
+}
+
+function getAccountSortOrder(
+  item: AccountChartItem,
+): number {
+  const ownerName =
+    item.ownerName.toLowerCase();
+
+  const accountType =
+    item.accountType.toLowerCase();
+
+  const accountName =
+    item.accountName.toLowerCase();
+
+  if (
+    accountName.includes("government") ||
+    accountName.includes("bond")
+  ) {
+    return 0;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ike"
+  ) {
+    return 1;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ikze"
+  ) {
+    return 2;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountName.includes("usd")
+  ) {
+    return 3;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ppk"
+  ) {
+    return 4;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ike"
+  ) {
+    return 5;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ikze"
+  ) {
+    return 6;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ppk"
+  ) {
+    return 7;
+  }
+
+  if (
+    accountType.includes("crypto") ||
+    accountName.includes("crypto")
+  ) {
+    return 8;
+  }
+
+  return 99;
 }
 
 function buildAccountChart(
@@ -511,8 +726,14 @@ function buildAccountChart(
     }))
     .sort(
       (first, second) =>
-        second.marketValueBase -
-        first.marketValueBase,
+        getAccountSortOrder(first) -
+          getAccountSortOrder(second) ||
+        first.ownerName.localeCompare(
+          second.ownerName,
+        ) ||
+        first.accountName.localeCompare(
+          second.accountName,
+        ),
     );
 
   return {
@@ -603,10 +824,11 @@ function buildAssetClassChart(
     }))
     .sort(
       (first, second) =>
-        first.assetClassSortOrder -
-          second.assetClassSortOrder ||
         second.marketValueBase -
-          first.marketValueBase,
+          first.marketValueBase ||
+        first.assetClassName.localeCompare(
+          second.assetClassName,
+        ),
     );
 
   return {
@@ -616,11 +838,75 @@ function buildAssetClassChart(
 }
 
 function buildHistoryChart(
+  reportAsOfDate: string,
   historyRuns: MonthlyReportRun[],
+  legacyHistoryPoints: PortfolioValueHistoryRecord[],
 ): {
   points: PortfolioHistoryPoint[];
   contributionsAvailable: boolean;
 } {
+  type Candidate = {
+    point: PortfolioHistoryPoint;
+    priority: number;
+  };
+
+  const pointByDate =
+    new Map<string, Candidate>();
+
+  for (
+    const historicalPoint of
+      legacyHistoryPoints
+  ) {
+    if (
+      historicalPoint.as_of_date >
+      reportAsOfDate
+    ) {
+      continue;
+    }
+
+    const totalValueBase =
+      numberValue(
+        historicalPoint.total_value_base,
+      );
+
+    const cumulativeContributionsBase =
+      optionalNumberValue(
+        historicalPoint
+          .cumulative_contributions_base,
+      );
+
+    pointByDate.set(
+      historicalPoint.as_of_date,
+      {
+        priority: 1,
+
+        point: {
+          historyPointId:
+            `historical:${historicalPoint.id}`,
+
+          reportRunId: null,
+
+          asOfDate:
+            historicalPoint.as_of_date,
+
+          revision: null,
+          status: "historical",
+          source: "historical",
+
+          totalValueBase,
+          cumulativeContributionsBase,
+
+          portfolioGainBase:
+            cumulativeContributionsBase ===
+            null
+              ? null
+              : totalValueBase -
+                cumulativeContributionsBase,
+        },
+      },
+    );
+  }
+
   const latestRevisionByDate =
     new Map<
       string,
@@ -630,7 +916,9 @@ function buildHistoryChart(
   for (const run of historyRuns) {
     if (
       run.report_type !== "monthly" ||
-      run.status === "voided"
+      run.status === "voided" ||
+      run.as_of_date >
+        reportAsOfDate
     ) {
       continue;
     }
@@ -652,29 +940,39 @@ function buildHistoryChart(
     }
   }
 
-  const points =
-    [...latestRevisionByDate.values()]
-      .sort((first, second) =>
-        first.as_of_date.localeCompare(
-          second.as_of_date,
-        ),
-      )
-      .map((run) => {
-        const totalValueBase =
-          numberValue(
-            run.total_value_base,
-          );
+  for (
+    const run of
+      latestRevisionByDate.values()
+  ) {
+    const totalValueBase =
+      numberValue(
+        run.total_value_base,
+      );
 
-        const cumulativeContributionsBase =
-          optionalNumberValue(
-            run.cumulative_contributions_base,
-          );
+    const cumulativeContributionsBase =
+      optionalNumberValue(
+        run.cumulative_contributions_base,
+      );
 
-        return {
+    pointByDate.set(
+      run.as_of_date,
+      {
+        priority: 2,
+
+        point: {
+          historyPointId:
+            `report:${run.id}`,
+
           reportRunId: run.id,
-          asOfDate: run.as_of_date,
-          revision: run.revision,
+
+          asOfDate:
+            run.as_of_date,
+
+          revision:
+            run.revision,
+
           status: run.status,
+          source: "report",
 
           totalValueBase,
           cumulativeContributionsBase,
@@ -685,11 +983,26 @@ function buildHistoryChart(
               ? null
               : totalValueBase -
                 cumulativeContributionsBase,
-        };
-      });
+        },
+      },
+    );
+  }
+
+  const points =
+    [...pointByDate.values()]
+      .map(
+        (candidate) =>
+          candidate.point,
+      )
+      .sort((first, second) =>
+        first.asOfDate.localeCompare(
+          second.asOfDate,
+        ),
+      );
 
   return {
     points,
+
     contributionsAvailable:
       points.some(
         (point) =>
@@ -1053,6 +1366,7 @@ export function buildMonthlyChartData({
   reportRun,
   reportItems,
   historyRuns,
+  legacyHistoryPoints,
   xirrSnapshots,
 }: BuildMonthlyChartDataInput): MonthlyChartData {
   const calculatedTotalValueBase =
@@ -1140,7 +1454,11 @@ export function buildMonthlyChartData({
       ),
 
     history:
-      buildHistoryChart(historyRuns),
+      buildHistoryChart(
+        reportRun.as_of_date,
+        historyRuns,
+        legacyHistoryPoints,
+      ),
 
     foreign:
       buildForeignChart(reportItems),

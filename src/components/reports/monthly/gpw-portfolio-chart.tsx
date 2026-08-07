@@ -24,6 +24,12 @@ type GpwPortfolioChartProps = {
 
 const CHART_WIDTH = 1500;
 
+const JAKUB_DARK = "#1E3A8A";
+const JAKUB_LIGHT = "#93C5FD";
+
+const NATALIA_DARK = "#065F46";
+const NATALIA_LIGHT = "#A7F3D0";
+
 function formatAmount(
   value: number,
   fractionDigits = 0,
@@ -108,6 +114,112 @@ function calculateAxisMaximum(
   return niceFraction * magnitude;
 }
 
+function parseHexColor(
+  color: string,
+): [number, number, number] {
+  const normalized =
+    color.replace("#", "");
+
+  return [
+    Number.parseInt(
+      normalized.slice(0, 2),
+      16,
+    ),
+    Number.parseInt(
+      normalized.slice(2, 4),
+      16,
+    ),
+    Number.parseInt(
+      normalized.slice(4, 6),
+      16,
+    ),
+  ];
+}
+
+function interpolateHexColor(
+  from: string,
+  to: string,
+  progress: number,
+): string {
+  const safeProgress =
+    Math.max(
+      0,
+      Math.min(1, progress),
+    );
+
+  const fromRgb =
+    parseHexColor(from);
+
+  const toRgb =
+    parseHexColor(to);
+
+  const channels =
+    fromRgb.map(
+      (fromChannel, index) =>
+        Math.round(
+          fromChannel +
+            (
+              toRgb[index] -
+              fromChannel
+            ) *
+              safeProgress,
+        ),
+    );
+
+  return `#${channels
+    .map((channel) =>
+      channel
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function getOwnerColor(
+  ownerName: string,
+  itemIndex: number,
+  itemCount: number,
+): string {
+  const normalizedOwnerName =
+    ownerName.toLowerCase();
+
+  const progress =
+    itemCount <= 1
+      ? 0
+      : itemIndex /
+        (itemCount - 1);
+
+  if (
+    normalizedOwnerName.includes(
+      "natalia",
+    )
+  ) {
+    return interpolateHexColor(
+      NATALIA_DARK,
+      NATALIA_LIGHT,
+      progress,
+    );
+  }
+
+  if (
+    normalizedOwnerName.includes(
+      "jakub",
+    )
+  ) {
+    return interpolateHexColor(
+      JAKUB_DARK,
+      JAKUB_LIGHT,
+      progress,
+    );
+  }
+
+  return interpolateHexColor(
+    "#334155",
+    "#CBD5E1",
+    progress,
+  );
+}
+
 export function GpwPortfolioChart({
   items,
   totalValueBase,
@@ -135,8 +247,8 @@ export function GpwPortfolioChart({
   const rowHeight = 56;
   const topMargin = 130;
   const bottomMargin = 105;
-  const leftMargin = 325;
-  const rightMargin = 285;
+  const leftMargin = 410;
+  const rightMargin = 260;
 
   const chartHeight =
     Math.max(
@@ -199,8 +311,8 @@ export function GpwPortfolioChart({
         height: chartHeight,
 
         filename:
-            `GPW_${asOfDate}_revision-${revision}.png`,
-        });
+          `GPW_${asOfDate}.png`,
+      });
     } catch (error) {
       console.error(
         "GPW chart export failed:",
@@ -257,7 +369,8 @@ export function GpwPortfolioChart({
           data-chart-order="1"
           data-chart-width={CHART_WIDTH}
           data-chart-height={chartHeight}
-          data-chart-filename={`GPW_${asOfDate}_revision-${revision}.png`}
+          data-chart-filename={`GPW_${asOfDate}.png`}
+          data-report-revision={revision}
           className="block min-w-[900px] w-full"
         >
           <rect
@@ -297,8 +410,7 @@ export function GpwPortfolioChart({
             fontSize={17}
             fill="#64748b"
           >
-            Cash balances excluded ·
-            revision {revision}
+            Jakub · blue gradient · Natalia · green gradient
           </text>
 
           {ticks.map(
@@ -372,19 +484,27 @@ export function GpwPortfolioChart({
                     plotWidth,
                 );
 
-              const opacity =
-                Math.max(
-                  0.5,
-                  1 -
-                    index *
-                      0.025,
-                );
+              const ownerSegments =
+                item.ownerBreakdown.length >
+                0
+                  ? item.ownerBreakdown
+                  : [
+                      {
+                        ownerId:
+                          "unknown",
+                        ownerName:
+                          "Unknown owner",
+                        marketValueBase:
+                          item.marketValueBase,
+                        percentage: 100,
+                      },
+                    ];
+
+              let accumulatedWidth =
+                0;
 
               const label =
-                `${
-                  item.instrumentTicker ??
-                  item.instrumentName
-                } [${formatQuantity(
+                `${item.instrumentName} [${formatQuantity(
                   item.quantity,
                 )}]`;
 
@@ -408,27 +528,83 @@ export function GpwPortfolioChart({
                     }
                     y={y + 23}
                     textAnchor="end"
-                    fontSize={18}
+                    fontSize={17}
                     fill="#0f172a"
                   >
                     {label}
                   </text>
 
-                  <rect
-                    x={leftMargin}
-                    y={y}
-                    width={
-                      barWidth
-                    }
-                    height={32}
-                    rx={2}
-                    fill={
-                      item.assetClassColor
-                    }
-                    fillOpacity={
-                      opacity
-                    }
-                  />
+                  {ownerSegments.map(
+                    (
+                      owner,
+                      ownerIndex,
+                    ) => {
+                      const segmentWidth =
+                        ownerIndex ===
+                        ownerSegments.length -
+                          1
+                          ? Math.max(
+                              0,
+                              barWidth -
+                                accumulatedWidth,
+                            )
+                          : Math.max(
+                              0,
+                              barWidth *
+                                (
+                                  owner.marketValueBase /
+                                  Math.max(
+                                    item.marketValueBase,
+                                    0.00000001,
+                                  )
+                                ),
+                            );
+
+                      const segmentX =
+                        leftMargin +
+                        accumulatedWidth;
+
+                      accumulatedWidth +=
+                        segmentWidth;
+
+                      const ownerColor =
+                        getOwnerColor(
+                          owner.ownerName,
+                          index,
+                          items.length,
+                        );
+
+                      const titleText =
+                        `${owner.ownerName}: ${formatAmount(
+                          owner.marketValueBase,
+                        )} ${baseCurrency}`;
+
+                      return (
+                        <rect
+                          key={
+                            owner.ownerId
+                          }
+                          x={segmentX}
+                          y={y}
+                          width={
+                            segmentWidth
+                          }
+                          height={32}
+                          rx={
+                            ownerSegments.length ===
+                            1
+                              ? 2
+                              : 0
+                          }
+                          fill={ownerColor}
+                        >
+                          <title>
+                            {titleText}
+                          </title>
+                        </rect>
+                      );
+                    },
+                  )}
 
                   <text
                     x={

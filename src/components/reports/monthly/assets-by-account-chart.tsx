@@ -173,6 +173,84 @@ function getAccountColor(
   return "#64748B";
 }
 
+function getAccountSortOrder(
+  item: AccountChartItem,
+): number {
+  const ownerName =
+    item.ownerName.toLowerCase();
+
+  const accountType =
+    item.accountType.toLowerCase();
+
+  const accountName =
+    item.accountName.toLowerCase();
+
+  if (
+    accountName.includes("government") ||
+    accountName.includes("bond")
+  ) {
+    return 0;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ike"
+  ) {
+    return 1;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ikze"
+  ) {
+    return 2;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountName.includes("usd")
+  ) {
+    return 3;
+  }
+
+  if (
+    ownerName.includes("jakub") &&
+    accountType === "ppk"
+  ) {
+    return 4;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ike"
+  ) {
+    return 5;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ikze"
+  ) {
+    return 6;
+  }
+
+  if (
+    ownerName.includes("natalia") &&
+    accountType === "ppk"
+  ) {
+    return 7;
+  }
+
+  if (
+    accountType.includes("crypto") ||
+    accountName.includes("crypto")
+  ) {
+    return 8;
+  }
+
+  return 99;
+}
+
 export function AssetsByAccountChart({
   items,
   totalValueBase,
@@ -197,6 +275,19 @@ export function AssetsByAccountChart({
     string | null
   >(null);
 
+  const orderedItems =
+    [...items].sort(
+      (first, second) =>
+        getAccountSortOrder(first) -
+          getAccountSortOrder(second) ||
+        first.ownerName.localeCompare(
+          second.ownerName,
+        ) ||
+        first.accountName.localeCompare(
+          second.accountName,
+        ),
+    );
+
   const topMargin = 145;
   const bottomMargin = 220;
   const leftMargin = 150;
@@ -214,7 +305,7 @@ export function AssetsByAccountChart({
 
   const maximumValue =
     Math.max(
-      ...items.map(
+      ...orderedItems.map(
         (item) =>
           item.marketValueBase,
       ),
@@ -242,9 +333,9 @@ export function AssetsByAccountChart({
     );
 
   const slotWidth =
-    items.length > 0
+    orderedItems.length > 0
       ? plotWidth /
-        items.length
+        orderedItems.length
       : plotWidth;
 
   const barWidth =
@@ -272,7 +363,7 @@ export function AssetsByAccountChart({
         height: CHART_HEIGHT,
 
         filename:
-          `ACCOUNTS_${asOfDate}_revision-${revision}.png`,
+          `ACCOUNTS_${asOfDate}.png`,
       });
     } catch (error) {
       console.error(
@@ -324,7 +415,8 @@ export function AssetsByAccountChart({
           data-chart-order="2"
           data-chart-width={CHART_WIDTH}
           data-chart-height={CHART_HEIGHT}
-          data-chart-filename={`ACCOUNTS_${asOfDate}_revision-${revision}.png`}
+          data-chart-filename={`ACCOUNTS_${asOfDate}.png`}
+          data-report-revision={revision}
           className="block min-w-[900px] w-full"
         >
           <rect
@@ -355,17 +447,6 @@ export function AssetsByAccountChart({
             )}{" "}
             {baseCurrency} —{" "}
             {asOfDate}
-          </text>
-
-          <text
-            x={CHART_WIDTH / 2}
-            y={82}
-            textAnchor="middle"
-            fontSize={17}
-            fill="#64748b"
-          >
-            Invested assets only · cash excluded ·
-            revision {revision}
           </text>
 
           {ticks.map((tick) => {
@@ -407,7 +488,7 @@ export function AssetsByAccountChart({
             );
           })}
 
-          {items.map(
+          {orderedItems.map(
             (item, index) => {
               const centerX =
                 leftMargin +

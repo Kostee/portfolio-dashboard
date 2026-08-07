@@ -177,8 +177,18 @@ export function AssetClassStructureChart({
     string | null
   >(null);
 
+  const sortedItems =
+    [...items].sort(
+      (first, second) =>
+        second.marketValueBase -
+          first.marketValueBase ||
+        first.assetClassName.localeCompare(
+          second.assetClassName,
+        ),
+    );
+
   const positiveItems =
-    items.filter(
+    sortedItems.filter(
       (item) =>
         item.marketValueBase > 0,
     );
@@ -248,7 +258,7 @@ export function AssetClassStructureChart({
         height: CHART_HEIGHT,
 
         filename:
-          `ASSET_CLASSES_${asOfDate}_revision-${revision}.png`,
+          `ASSET_CLASSES_${asOfDate}.png`,
       });
     } catch (error) {
       console.error(
@@ -300,7 +310,8 @@ export function AssetClassStructureChart({
           data-chart-order="3"
           data-chart-width={CHART_WIDTH}
           data-chart-height={CHART_HEIGHT}
-          data-chart-filename={`ASSET_CLASSES_${asOfDate}_revision-${revision}.png`}
+          data-chart-filename={`ASSET_CLASSES_${asOfDate}.png`}
+          data-report-revision={revision}
           className="block min-w-[900px] w-full"
         >
           <rect
@@ -329,18 +340,6 @@ export function AssetClassStructureChart({
             {asOfDate}
           </text>
 
-          <text
-            x={CHART_WIDTH / 2}
-            y={86}
-            textAnchor="middle"
-            fontSize={17}
-            fill="#64748b"
-          >
-            Seven-class invested portfolio ·
-            cash excluded · revision{" "}
-            {revision}
-          </text>
-
           {segments.length > 0 ? (
             <>
               {segments.map(
@@ -365,19 +364,11 @@ export function AssetClassStructureChart({
                     stroke="#ffffff"
                     strokeWidth={5}
                   >
-                    <title>
-                      {item.assetClassName}
-                      {": "}
-                      {formatAmount(
-                        item.marketValueBase,
-                      )}{" "}
-                      {baseCurrency}
-                      {" · "}
-                      {formatPercentage(
-                        item.percentage,
-                      )}
-                      %
-                    </title>
+                    <title>{`${item.assetClassName}: ${formatAmount(
+                      item.marketValueBase,
+                    )} ${baseCurrency} · ${formatPercentage(
+                      item.percentage,
+                    )}%`}</title>
                   </path>
                 ),
               )}
@@ -423,15 +414,6 @@ export function AssetClassStructureChart({
                 {baseCurrency}
               </text>
 
-              <text
-                x={CENTER_X}
-                y={CENTER_Y + 80}
-                textAnchor="middle"
-                fontSize={16}
-                fill="#64748b"
-              >
-                cash excluded
-              </text>
             </>
           ) : (
             <text
@@ -455,7 +437,7 @@ export function AssetClassStructureChart({
             Portfolio composition
           </text>
 
-          {items.map(
+          {sortedItems.map(
             (item, index) => {
               const rowY =
                 215 +

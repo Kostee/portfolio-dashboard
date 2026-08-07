@@ -6,6 +6,9 @@ type ReportRunRow =
 type ReportItemRow =
   Database["public"]["Tables"]["portfolio_report_items"]["Row"];
 
+type XirrSnapshotRow =
+  Database["public"]["Tables"]["portfolio_xirr_snapshots"]["Row"];
+
 export type MonthlyReportRun = Pick<
   ReportRunRow,
   | "id"
@@ -103,6 +106,42 @@ export type AssetClassChartItem = {
   itemCount: number;
 };
 
+export type MonthlyXirrSnapshot = Pick<
+  XirrSnapshotRow,
+  | "id"
+  | "workspace_id"
+  | "report_run_id"
+  | "as_of_date"
+  | "xirr_rate"
+  | "terminal_value_base"
+  | "terminal_invested_value_base"
+  | "terminal_cash_value_base"
+  | "cash_flow_count"
+  | "calculation_version"
+  | "created_at"
+>;
+
+export type XirrHistoryPoint = {
+  xirrSnapshotId: string;
+  reportRunId: string | null;
+  asOfDate: string;
+  revision: number | null;
+  xirrRate: number;
+  calculationVersion: string;
+};
+
+export type FrozenXirrSummary = {
+  xirrSnapshotId: string;
+  xirrRate: number;
+
+  terminalInvestedValueBase: number | null;
+  terminalCashValueBase: number | null;
+  terminalValueBase: number | null;
+
+  cashFlowCount: number | null;
+  calculationVersion: string;
+};
+
 export type PortfolioHistoryPoint = {
   reportRunId: string;
   asOfDate: string;
@@ -150,6 +189,11 @@ export type MonthlyChartData = {
     portfolioGainBase: number | null;
   };
 
+  xirr: {
+    current: FrozenXirrSummary | null;
+    history: XirrHistoryPoint[];
+  };
+
   gpw: {
     totalValueBase: number;
     items: InstrumentChartItem[];
@@ -181,6 +225,7 @@ type BuildMonthlyChartDataInput = {
   reportRun: MonthlyReportRun;
   reportItems: MonthlyReportItem[];
   historyRuns: MonthlyReportRun[];
+  xirrSnapshots: MonthlyXirrSnapshot[];
 };
 
 type MutableInstrumentGroup = {
@@ -655,6 +700,222 @@ function buildHistoryChart(
   };
 }
 
+function buildXirrData(
+  reportRun: MonthlyReportRun,
+  historyRuns: MonthlyReportRun[],
+  xirrSnapshots: MonthlyXirrSnapshot[],
+): {
+  current: FrozenXirrSummary | null;
+  history: XirrHistoryPoint[];
+} {
+  const latestRunByDate =
+    new Map<
+      string,
+      MonthlyReportRun
+    >();
+
+  const runById =
+    new Map<
+      string,
+      MonthlyReportRun
+    >();
+
+  for (const run of historyRuns) {
+    runById.set(run.id, run);
+
+    if (
+      run.report_type !== "monthly" ||
+      run.status === "voided"
+    ) {
+      continue;
+    }
+
+    const existing =
+      latestRunByDate.get(
+        run.as_of_date,
+      );
+
+    if (
+      !existing ||
+      run.revision >
+        existing.revision
+    ) {
+      latestRunByDate.set(
+        run.as_of_date,
+        run,
+      );
+    }
+  }
+
+  const currentSnapshot =
+    xirrSnapshots.find(
+      (snapshot) =>
+        snapshot.report_run_id ===
+        reportRun.id,
+    ) ?? null;
+
+  const current =
+    currentSnapshot === null
+      ? null
+      : {
+          xirrSnapshotId:
+            currentSnapshot.id,
+
+          xirrRate:
+            numberValue(
+              currentSnapshot.xirr_rate,
+            ),
+
+          terminalInvestedValueBase:
+            optionalNumberValue(
+              currentSnapshot
+                .terminal_invested_value_base,
+            ),
+
+          terminalCashValueBase:
+            optionalNumberValue(
+              currentSnapshot
+                .terminal_cash_value_base,
+            ),
+
+          terminalValueBase:
+            optionalNumberValue(
+              currentSnapshot
+                .terminal_value_base,
+            ),
+
+          cashFlowCount:
+            currentSnapshot
+              .cash_flow_count,
+
+          calculationVersion:
+            currentSnapshot
+              .calculation_version,
+        };
+
+  type Candidate = {
+    point: XirrHistoryPoint;
+    priority: number;
+  };
+
+  const pointByDate =
+    new Map<string, Candidate>();
+
+  for (
+    const snapshot of xirrSnapshots
+  ) {
+    let revision: number | null =
+      null;
+
+    let priority = 1;
+
+    if (snapshot.report_run_id) {
+      const linkedRun =
+        runById.get(
+          snapshot.report_run_id,
+        );
+
+      if (
+        !linkedRun ||
+        linkedRun.report_type !==
+          "monthly" ||
+        linkedRun.status ===
+          "voided"
+      ) {
+        continue;
+      }
+
+      const latestRun =
+        latestRunByDate.get(
+          snapshot.as_of_date,
+        );
+
+      if (
+        !latestRun ||
+        latestRun.id !==
+          snapshot.report_run_id
+      ) {
+        continue;
+      }
+
+      revision =
+        linkedRun.revision;
+
+      priority = 2;
+    }
+
+    const candidate: Candidate = {
+      priority,
+
+      point: {
+        xirrSnapshotId:
+          snapshot.id,
+
+        reportRunId:
+          snapshot.report_run_id,
+
+        asOfDate:
+          snapshot.as_of_date,
+
+        revision,
+
+        xirrRate:
+          numberValue(
+            snapshot.xirr_rate,
+          ),
+
+        calculationVersion:
+          snapshot.calculation_version,
+      },
+    };
+
+    const existing =
+      pointByDate.get(
+        snapshot.as_of_date,
+      );
+
+    if (
+      !existing ||
+      candidate.priority >
+        existing.priority ||
+      (
+        candidate.priority ===
+          existing.priority &&
+        (
+          candidate.point.revision ??
+          -1
+        ) >
+          (
+            existing.point.revision ??
+            -1
+          )
+      )
+    ) {
+      pointByDate.set(
+        snapshot.as_of_date,
+        candidate,
+      );
+    }
+  }
+
+  const history =
+    [...pointByDate.values()]
+      .map(
+        (candidate) =>
+          candidate.point,
+      )
+      .sort((first, second) =>
+        first.asOfDate.localeCompare(
+          second.asOfDate,
+        ),
+      );
+
+  return {
+    current,
+    history,
+  };
+}
+
 function buildForeignChart(
   items: MonthlyReportItem[],
 ): {
@@ -792,6 +1053,7 @@ export function buildMonthlyChartData({
   reportRun,
   reportItems,
   historyRuns,
+  xirrSnapshots,
 }: BuildMonthlyChartDataInput): MonthlyChartData {
   const calculatedTotalValueBase =
     sumBaseValue(reportItems);
@@ -856,6 +1118,13 @@ export function buildMonthlyChartData({
       cumulativeContributionsBase,
       portfolioGainBase,
     },
+
+    xirr:
+      buildXirrData(
+        reportRun,
+        historyRuns,
+        xirrSnapshots,
+      ),
 
     gpw:
       buildInstrumentChartItems(

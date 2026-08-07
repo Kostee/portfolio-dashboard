@@ -480,6 +480,59 @@ export type Database = {
           },
         ]
       }
+      portfolio_legacy_external_flows: {
+        Row: {
+          amount_base: number
+          base_currency: string
+          created_at: string
+          created_by: string | null
+          external_reference: string
+          flow_date: string
+          flow_type: string
+          id: string
+          notes: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          amount_base: number
+          base_currency?: string
+          created_at?: string
+          created_by?: string | null
+          external_reference: string
+          flow_date: string
+          flow_type: string
+          id?: string
+          notes?: string | null
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          amount_base?: number
+          base_currency?: string
+          created_at?: string
+          created_by?: string | null
+          external_reference?: string
+          flow_date?: string
+          flow_type?: string
+          id?: string
+          notes?: string | null
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_legacy_external_flows_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_operation_entries: {
         Row: {
           account_id: string
@@ -827,6 +880,79 @@ export type Database = {
           },
           {
             foreignKeyName: "portfolio_report_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_xirr_snapshots: {
+        Row: {
+          as_of_date: string
+          calculation_version: string
+          cash_flow_count: number | null
+          created_at: string
+          created_by: string | null
+          external_reference: string
+          id: string
+          notes: string | null
+          report_run_id: string | null
+          source: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_value_base: number | null
+          updated_at: string
+          workspace_id: string
+          xirr_rate: number
+        }
+        Insert: {
+          as_of_date: string
+          calculation_version: string
+          cash_flow_count?: number | null
+          created_at?: string
+          created_by?: string | null
+          external_reference: string
+          id?: string
+          notes?: string | null
+          report_run_id?: string | null
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_value_base?: number | null
+          updated_at?: string
+          workspace_id: string
+          xirr_rate: number
+        }
+        Update: {
+          as_of_date?: string
+          calculation_version?: string
+          cash_flow_count?: number | null
+          created_at?: string
+          created_by?: string | null
+          external_reference?: string
+          id?: string
+          notes?: string | null
+          report_run_id?: string | null
+          source?: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_value_base?: number | null
+          updated_at?: string
+          workspace_id?: string
+          xirr_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_xirr_snapshots_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_monthly_report_history"
+            referencedColumns: ["report_run_id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_snapshots_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_report_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_snapshots_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"

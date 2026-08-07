@@ -26,7 +26,7 @@ type ForeignMarketAssetsChartProps = {
 
 const CHART_WIDTH = 1600;
 
-const TOP_MARGIN = 135;
+const TOP_MARGIN = 115;
 const BOTTOM_MARGIN = 100;
 
 const LEFT_MARGIN = 390;
@@ -272,7 +272,7 @@ export function ForeignMarketAssetsChart({
         height: chartHeight,
 
         filename:
-          `FOREIGN_ASSETS_${asOfDate}_revision-${revision}.png`,
+          `FOREIGN_ASSETS_${asOfDate}.png`,
       });
     } catch (error) {
       console.error(
@@ -326,7 +326,8 @@ export function ForeignMarketAssetsChart({
           data-chart-order="5"
           data-chart-width={CHART_WIDTH}
           data-chart-height={chartHeight}
-          data-chart-filename={`FOREIGN_ASSETS_${asOfDate}_revision-${revision}.png`}
+          data-chart-filename={`FOREIGN_ASSETS_${asOfDate}.png`}
+          data-report-revision={revision}
           className="block min-w-[950px] w-full"
         >
           <rect
@@ -355,7 +356,8 @@ export function ForeignMarketAssetsChart({
             {formatAmount(
               totalValueBase,
             )}{" "}
-            {baseCurrency}
+            {baseCurrency} —{" "}
+            {asOfDate}
           </text>
 
           <text
@@ -367,19 +369,6 @@ export function ForeignMarketAssetsChart({
           >
             Global ETFs · U.S. REITs ·
             semiconductor stocks ·{" "}
-            {asOfDate} · revision{" "}
-            {revision}
-          </text>
-
-          <text
-            x={CHART_WIDTH / 2}
-            y={108}
-            textAnchor="middle"
-            fontSize={15}
-            fill="#94a3b8"
-          >
-            Each instrument is displayed
-            separately · cash excluded ·{" "}
             {itemCount}{" "}
             {itemCount === 1
               ? "position"

@@ -30,8 +30,19 @@ type PositionedHistoryPoint = {
   contributionY: number | null;
 };
 
+type IntervalGainLabel = {
+  key: string;
+  x: number;
+  y: number;
+  value: number;
+};
+
 const CHART_WIDTH = 1500;
-const CHART_HEIGHT = 900;
+const CHART_HEIGHT = 960;
+
+const PORTFOLIO_COLOR = "#111827";
+const CONTRIBUTION_COLOR = "#F59E0B";
+const SPECIAL_DATE = "2025-12-29";
 
 function formatAmount(
   value: number,
@@ -57,13 +68,28 @@ function formatSignedAmount(
 function formatReportDate(
   value: string,
 ): string {
+  return value;
+}
+
+function isoDateToDayNumber(
+  value: string,
+): number {
   const [
     year,
     month,
     day,
-  ] = value.split("-");
+  ] = value
+    .split("-")
+    .map(Number);
 
-  return `${day}.${month}.${year}`;
+  return Math.floor(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ) /
+      86_400_000,
+  );
 }
 
 function calculateAxisMaximum(
@@ -127,6 +153,19 @@ function buildPolylinePoints(
     .join(" ");
 }
 
+function buildDiamondPoints(
+  x: number,
+  y: number,
+  radius: number,
+): string {
+  return [
+    `${x},${y - radius}`,
+    `${x + radius},${y}`,
+    `${x},${y + radius}`,
+    `${x - radius},${y}`,
+  ].join(" ");
+}
+
 export function PortfolioHistoryChart({
   points,
   asOfDate,
@@ -158,8 +197,8 @@ export function PortfolioHistoryChart({
         ),
     );
 
-  const topMargin = 155;
-  const bottomMargin = 150;
+  const topMargin = 165;
+  const bottomMargin = 175;
   const leftMargin = 145;
   const rightMargin = 85;
 
@@ -221,21 +260,48 @@ export function PortfolioHistoryChart({
         ) / tickCount,
     );
 
+  const firstDay =
+    sortedPoints.length > 0
+      ? isoDateToDayNumber(
+          sortedPoints[0].asOfDate,
+        )
+      : 0;
+
+  const lastDay =
+    sortedPoints.length > 0
+      ? isoDateToDayNumber(
+          sortedPoints[
+            sortedPoints.length - 1
+          ].asOfDate,
+        )
+      : firstDay;
+
+  const dateRange =
+    Math.max(
+      1,
+      lastDay - firstDay,
+    );
+
   const positionedPoints:
     PositionedHistoryPoint[] =
       sortedPoints.map(
         (point, index) => {
+          const dayNumber =
+            isoDateToDayNumber(
+              point.asOfDate,
+            );
+
           const x =
             sortedPoints.length === 1
               ? leftMargin +
                 plotWidth / 2
               : leftMargin +
                 (
-                  index /
                   (
-                    sortedPoints.length -
-                    1
-                  )
+                    dayNumber -
+                    firstDay
+                  ) /
+                  dateRange
                 ) *
                   plotWidth;
 
@@ -303,20 +369,89 @@ export function PortfolioHistoryChart({
         }),
       );
 
+  const intervalGainLabels:
+    IntervalGainLabel[] = [];
+
+  for (
+    let index = 1;
+    index < positionedPoints.length;
+    index += 1
+  ) {
+    const previous =
+      positionedPoints[index - 1];
+
+    const current =
+      positionedPoints[index];
+
+    const previousContributions =
+      previous.point
+        .cumulativeContributionsBase;
+
+    const currentContributions =
+      current.point
+        .cumulativeContributionsBase;
+
+    if (
+      previousContributions === null ||
+      currentContributions === null
+    ) {
+      continue;
+    }
+
+    const portfolioChange =
+      current.point.totalValueBase -
+      previous.point.totalValueBase;
+
+    const contributionChange =
+      currentContributions -
+      previousContributions;
+
+    const intervalGain =
+      portfolioChange -
+      contributionChange;
+
+    const x =
+      (previous.x + current.x) /
+      2;
+
+    const portfolioMidY =
+      (
+        previous.portfolioY +
+        current.portfolioY
+      ) /
+      2;
+
+    const contributionMidY =
+      previous.contributionY !== null &&
+      current.contributionY !== null
+        ? (
+            previous.contributionY +
+            current.contributionY
+          ) /
+          2
+        : portfolioMidY + 70;
+
+    const y =
+      Math.min(
+        portfolioMidY + 36,
+        contributionMidY - 28,
+      );
+
+    intervalGainLabels.push({
+      key:
+        `${previous.point.asOfDate}:${current.point.asOfDate}`,
+      x,
+      y,
+      value: intervalGain,
+    });
+  }
+
   const latestPoint =
     sortedPoints.at(-1) ?? null;
 
   const latestGain =
     latestPoint
       ?.portfolioGainBase ?? null;
-
-  const labelEvery =
-    Math.max(
-      1,
-      Math.ceil(
-        sortedPoints.length / 10,
-      ),
-    );
 
   async function handleDownload() {
     const svg =
@@ -337,7 +472,7 @@ export function PortfolioHistoryChart({
         height: CHART_HEIGHT,
 
         filename:
-          `PORTFOLIO_HISTORY_${asOfDate}_revision-${revision}.png`,
+          `PORTFOLIO_HISTORY_${asOfDate}.png`,
       });
     } catch (error) {
       console.error(
@@ -357,7 +492,7 @@ export function PortfolioHistoryChart({
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">
-          PNG resolution: 3000 × 1800
+          PNG resolution: 3000 × 1920
         </p>
 
         <button
@@ -389,7 +524,8 @@ export function PortfolioHistoryChart({
           data-chart-order="4"
           data-chart-width={CHART_WIDTH}
           data-chart-height={CHART_HEIGHT}
-          data-chart-filename={`PORTFOLIO_HISTORY_${asOfDate}_revision-${revision}.png`}
+          data-chart-filename={`PORTFOLIO_HISTORY_${asOfDate}.png`}
+          data-report-revision={revision}
           className="block min-w-[900px] w-full"
         >
           <rect
@@ -408,25 +544,14 @@ export function PortfolioHistoryChart({
 
           <text
             x={CHART_WIDTH / 2}
-            y={50}
+            y={58}
             textAnchor="middle"
             fontSize={32}
             fontWeight={600}
             fill="#0f172a"
           >
-            Portfolio value and cumulative
-            contributions
-          </text>
-
-          <text
-            x={CHART_WIDTH / 2}
-            y={84}
-            textAnchor="middle"
-            fontSize={17}
-            fill="#64748b"
-          >
-            Through {asOfDate} · cash excluded ·
-            revision {revision}
+            Portfolio value and cumulative contributions —{" "}
+            {asOfDate}
           </text>
 
           <g>
@@ -435,7 +560,7 @@ export function PortfolioHistoryChart({
               y1={116}
               x2={560}
               y2={116}
-              stroke="#2563eb"
+              stroke={PORTFOLIO_COLOR}
               strokeWidth={5}
               strokeLinecap="round"
             />
@@ -444,7 +569,7 @@ export function PortfolioHistoryChart({
               cx={530}
               cy={116}
               r={7}
-              fill="#2563eb"
+              fill={PORTFOLIO_COLOR}
             />
 
             <text
@@ -461,9 +586,8 @@ export function PortfolioHistoryChart({
               y1={116}
               x2={850}
               y2={116}
-              stroke="#e11d48"
-              strokeWidth={4}
-              strokeDasharray="12 8"
+              stroke={CONTRIBUTION_COLOR}
+              strokeWidth={5}
               strokeLinecap="round"
             />
 
@@ -471,7 +595,7 @@ export function PortfolioHistoryChart({
               cx={820}
               cy={116}
               r={7}
-              fill="#e11d48"
+              fill={CONTRIBUTION_COLOR}
             />
 
             <text
@@ -523,6 +647,41 @@ export function PortfolioHistoryChart({
             );
           })}
 
+          {positionedPoints
+            .filter(
+              ({ point }) =>
+                point.asOfDate ===
+                SPECIAL_DATE,
+            )
+            .map((specialPoint) => (
+              <g key="year-end-guide">
+                <line
+                  x1={specialPoint.x}
+                  y1={topMargin - 18}
+                  x2={specialPoint.x}
+                  y2={
+                    topMargin +
+                    plotHeight +
+                    12
+                  }
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  strokeDasharray="5 7"
+                />
+
+                <text
+                  x={specialPoint.x}
+                  y={topMargin - 28}
+                  textAnchor="middle"
+                  fontSize={14}
+                  fontWeight={600}
+                  fill="#64748b"
+                >
+                  Year-end checkpoint
+                </text>
+              </g>
+            ))}
+
           {portfolioLinePoints.length >
             1 && (
             <polyline
@@ -530,7 +689,7 @@ export function PortfolioHistoryChart({
                 portfolioLinePoints,
               )}
               fill="none"
-              stroke="#2563eb"
+              stroke={PORTFOLIO_COLOR}
               strokeWidth={6}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -544,46 +703,76 @@ export function PortfolioHistoryChart({
                 contributionLinePoints,
               )}
               fill="none"
-              stroke="#e11d48"
+              stroke={CONTRIBUTION_COLOR}
               strokeWidth={5}
-              strokeDasharray="14 10"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+          )}
+
+          {intervalGainLabels.map(
+            (label) => (
+              <text
+                key={label.key}
+                x={label.x}
+                y={label.y}
+                textAnchor="middle"
+                fontSize={14}
+                fontWeight={700}
+                fill={
+                  label.value >= 0
+                    ? "#047857"
+                    : "#be123c"
+                }
+              >
+                {formatSignedAmount(
+                  label.value,
+                )}{" "}
+                {baseCurrency}
+              </text>
+            ),
           )}
 
           {positionedPoints.map(
             (positionedPoint) => {
               const {
                 point,
-                index,
                 x,
                 portfolioY,
                 contributionY,
               } = positionedPoint;
 
-              const showDateLabel =
-                index %
-                  labelEvery ===
-                  0 ||
-                index ===
-                  positionedPoints.length -
-                    1;
+              const isSpecial =
+                point.asOfDate ===
+                SPECIAL_DATE;
 
               return (
                 <g
                   key={
-                    point.reportRunId
+                    point.historyPointId
                   }
                 >
-                  <circle
-                    cx={x}
-                    cy={portfolioY}
-                    r={9}
-                    fill="#ffffff"
-                    stroke="#2563eb"
-                    strokeWidth={5}
-                  />
+                  {isSpecial ? (
+                    <polygon
+                      points={buildDiamondPoints(
+                        x,
+                        portfolioY,
+                        11,
+                      )}
+                      fill="#ffffff"
+                      stroke={PORTFOLIO_COLOR}
+                      strokeWidth={5}
+                    />
+                  ) : (
+                    <circle
+                      cx={x}
+                      cy={portfolioY}
+                      r={9}
+                      fill="#ffffff"
+                      stroke={PORTFOLIO_COLOR}
+                      strokeWidth={5}
+                    />
+                  )}
 
                   <text
                     x={x}
@@ -591,7 +780,7 @@ export function PortfolioHistoryChart({
                     textAnchor="middle"
                     fontSize={15}
                     fontWeight={600}
-                    fill="#1d4ed8"
+                    fill={PORTFOLIO_COLOR}
                   >
                     {formatAmount(
                       point.totalValueBase,
@@ -601,14 +790,27 @@ export function PortfolioHistoryChart({
                   {contributionY !==
                     null && (
                     <>
-                      <circle
-                        cx={x}
-                        cy={contributionY}
-                        r={8}
-                        fill="#ffffff"
-                        stroke="#e11d48"
-                        strokeWidth={4}
-                      />
+                      {isSpecial ? (
+                        <polygon
+                          points={buildDiamondPoints(
+                            x,
+                            contributionY,
+                            10,
+                          )}
+                          fill="#ffffff"
+                          stroke={CONTRIBUTION_COLOR}
+                          strokeWidth={4}
+                        />
+                      ) : (
+                        <circle
+                          cx={x}
+                          cy={contributionY}
+                          r={8}
+                          fill="#ffffff"
+                          stroke={CONTRIBUTION_COLOR}
+                          strokeWidth={4}
+                        />
+                      )}
 
                       <text
                         x={x}
@@ -619,7 +821,7 @@ export function PortfolioHistoryChart({
                         textAnchor="middle"
                         fontSize={14}
                         fontWeight={600}
-                        fill="#be123c"
+                        fill={PORTFOLIO_COLOR}
                       >
                         {formatAmount(
                           point
@@ -630,23 +832,30 @@ export function PortfolioHistoryChart({
                     </>
                   )}
 
-                  {showDateLabel && (
-                    <text
-                      x={x}
-                      y={
-                        topMargin +
-                        plotHeight +
-                        40
-                      }
-                      textAnchor="middle"
-                      fontSize={16}
-                      fill="#475569"
-                    >
-                      {formatReportDate(
-                        point.asOfDate,
-                      )}
-                    </text>
-                  )}
+                  <text
+                    x={x}
+                    y={
+                      topMargin +
+                      plotHeight +
+                      42
+                    }
+                    textAnchor="middle"
+                    fontSize={14}
+                    fontWeight={
+                      isSpecial
+                        ? 700
+                        : 400
+                    }
+                    fill={
+                      isSpecial
+                        ? "#334155"
+                        : "#475569"
+                    }
+                  >
+                    {formatReportDate(
+                      point.asOfDate,
+                    )}
+                  </text>
                 </g>
               );
             },

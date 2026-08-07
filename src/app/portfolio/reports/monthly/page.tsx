@@ -71,6 +71,12 @@ type ReportItem = Pick<
   | "source_snapshot_date"
 >;
 
+type XirrSnapshotSummary = Pick<
+  Database["public"]["Tables"]["portfolio_xirr_snapshots"]["Row"],
+  | "report_run_id"
+  | "xirr_rate"
+>;
+
 const ERROR_MESSAGES: Record<
   string,
   string
@@ -153,8 +159,26 @@ function formatAmount(
 ): string {
   return new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 8,
+    maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatXirrPercentage(
+  rate: number,
+): string {
+  const percentage =
+    rate * 100;
+
+  const sign =
+    percentage > 0 ? "+" : "";
+
+  return `${sign}${new Intl.NumberFormat(
+    "en-GB",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  ).format(percentage)}%`;
 }
 
 function formatDateTime(
@@ -322,6 +346,7 @@ export default async function MonthlyReportPage({
     unitPositionsResult,
     reportedBalancesResult,
     reportHistoryResult,
+    xirrSnapshotsResult,
   ] = await Promise.all([
     supabase
       .from("owners")
@@ -408,7 +433,26 @@ export default async function MonthlyReportPage({
       .order("revision", {
           ascending: false,
       })
-      .limit(20),
+      .limit(120),
+
+    supabase
+      .from("portfolio_xirr_snapshots")
+      .select(
+        "report_run_id, xirr_rate",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .not(
+        "report_run_id",
+        "is",
+        null,
+      )
+      .order("as_of_date", {
+        ascending: false,
+      })
+      .limit(50),
     ]);
 
   if (ownersResult.error) {
@@ -467,6 +511,13 @@ export default async function MonthlyReportPage({
     );
   }
 
+  if (xirrSnapshotsResult.error) {
+    console.error(
+      "Monthly report XIRR query failed:",
+      xirrSnapshotsResult.error,
+    );
+  }
+
   const owners =
     ownersResult.data ?? [];
 
@@ -492,6 +543,31 @@ export default async function MonthlyReportPage({
 
   const reportHistory =
     reportHistoryResult.data ?? [];
+
+  const existingReportForDate =
+    reportHistory.find(
+      (report) =>
+        report.as_of_date === asOfDate &&
+        report.report_run_id !== null,
+    ) ?? null;
+
+  const xirrSnapshots =
+    (xirrSnapshotsResult.data ??
+      []) as XirrSnapshotSummary[];
+
+  const xirrByReportRunId =
+    new Map(
+      xirrSnapshots
+        .filter(
+          (snapshot) =>
+            snapshot.report_run_id !==
+            null,
+        )
+        .map((snapshot) => [
+          snapshot.report_run_id as string,
+          Number(snapshot.xirr_rate),
+        ]),
+    );
 
   let selectedReport:
     ReportRun | null = null;
@@ -1580,13 +1656,15 @@ export default async function MonthlyReportPage({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                 <h2 className="text-xl font-semibold">
-                    Create immutable report source
+                    Create monthly report
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                     All invested positions and PPK balances
                     must have an exact snapshot for{" "}
-                    {asOfDate}. Cash is not included.
+                    {asOfDate}. Cash is excluded from the
+                    five charts but included in XIRR where
+                    applicable.
                 </p>
                 </div>
 
@@ -1606,22 +1684,40 @@ export default async function MonthlyReportPage({
                     disabled={!reportReady}
                     className={
                     reportReady
-                        ? "rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
+                        ? existingReportForDate
+                          ? "rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700"
+                          : "rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
                         : "cursor-not-allowed rounded-lg bg-slate-200 px-5 py-2.5 text-sm font-medium text-slate-500"
                     }
                 >
                     {reportReady
-                    ? "Create report snapshot"
+                    ? existingReportForDate
+                      ? "Replace existing report"
+                      : "Create report"
                     : `Complete ${missingCount} items`}
                 </button>
                 </form>
             </div>
 
-            {reportReady && (
+            {reportReady && existingReportForDate && (
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                A monthly report already exists for{" "}
+                <span className="font-semibold">
+                    {asOfDate}
+                </span>
+                . Creating it again will replace the
+                existing frozen report and its report-linked
+                XIRR. The replacement is atomic: if the new
+                report cannot be created, the existing one is
+                kept.
+                </div>
+            )}
+
+            {reportReady && !existingReportForDate && (
                 <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
-                Creating another snapshot for the same
-                report date will create a new revision.
-                Earlier revisions remain unchanged.
+                One monthly report is stored per report date.
+                Recreating the same date later will explicitly
+                replace this report.
                 </div>
             )}
             </section>
@@ -1635,8 +1731,7 @@ export default async function MonthlyReportPage({
                     </p>
 
                     <h2 className="mt-2 text-2xl font-semibold text-emerald-950">
-                    {selectedReport.as_of_date} · Revision{" "}
-                    {selectedReport.revision}
+                    {selectedReport.as_of_date}
                     </h2>
 
                     <p className="mt-2 text-sm text-emerald-800">
@@ -1653,7 +1748,7 @@ export default async function MonthlyReportPage({
                 </span>
                 </div>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl bg-white p-4">
                     <p className="text-xs text-slate-500">
                     Frozen items
@@ -1664,7 +1759,7 @@ export default async function MonthlyReportPage({
                     </p>
                 </div>
 
-                <div className="rounded-xl bg-white p-4 sm:col-span-2">
+                <div className="rounded-xl bg-white p-4 lg:col-span-2">
                     <p className="text-xs text-slate-500">
                     Total invested assets
                     </p>
@@ -1681,6 +1776,28 @@ export default async function MonthlyReportPage({
                     <p className="mt-1 text-xs text-slate-500">
                     Cash balances excluded
                     </p>
+                </div>
+
+                <div className="rounded-xl bg-white p-4">
+                    <p className="text-xs text-slate-500">
+                    Annualised XIRR
+                    </p>
+
+                    {xirrByReportRunId.has(
+                      selectedReport.id,
+                    ) ? (
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">
+                        {formatXirrPercentage(
+                          xirrByReportRunId.get(
+                            selectedReport.id,
+                          ) ?? 0,
+                        )}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-lg font-semibold text-amber-700">
+                        Not available
+                      </p>
+                    )}
                 </div>
                 </div>
 
@@ -1759,9 +1876,9 @@ export default async function MonthlyReportPage({
                 </div>
 
                 <div className="mt-5 rounded-xl border border-emerald-200 bg-white p-4 text-sm leading-6 text-emerald-800">
-                This revision will remain unchanged even if
-                operations, valuations or instrument names
-                are edited later.
+                This frozen report remains unchanged until
+                you explicitly replace the report for this
+                date.
                 </div>
             </section>
             )}
@@ -1770,12 +1887,12 @@ export default async function MonthlyReportPage({
             <div className="flex items-start justify-between gap-4">
                 <div>
                 <h2 className="text-xl font-semibold">
-                    Recent monthly report snapshots
+                    Recent monthly reports
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                    The twenty most recent frozen report
-                    revisions.
+                    The twenty most recent frozen monthly
+                    reports.
                 </p>
                 </div>
 
@@ -1807,8 +1924,7 @@ export default async function MonthlyReportPage({
                         >
                         <div>
                             <p className="font-medium text-slate-900">
-                            {report.as_of_date} · Revision{" "}
-                            {report.revision}
+                            {report.as_of_date}
                             </p>
 
                             <p className="mt-1 text-xs text-slate-500">
@@ -1823,15 +1939,30 @@ export default async function MonthlyReportPage({
                             </p>
                         </div>
 
-                        <p className="font-semibold text-slate-900">
-                            {formatAmount(
-                            Number(
-                                report.total_value_base ??
-                                0,
-                            ),
-                            )}{" "}
-                            {report.base_currency}
-                        </p>
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-slate-900">
+                              {formatAmount(
+                              Number(
+                                  report.total_value_base ??
+                                  0,
+                              ),
+                              )}{" "}
+                              {report.base_currency}
+                          </p>
+
+                          {xirrByReportRunId.has(
+                            report.report_run_id,
+                          ) && (
+                            <p className="mt-1 text-xs font-medium text-slate-500">
+                              XIRR{" "}
+                              {formatXirrPercentage(
+                                xirrByReportRunId.get(
+                                  report.report_run_id,
+                                ) ?? 0,
+                              )}
+                            </p>
+                          )}
+                        </div>
                         </Link>
                     </li>
                     );

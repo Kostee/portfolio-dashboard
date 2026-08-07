@@ -887,6 +887,137 @@ export type Database = {
           },
         ]
       }
+      portfolio_value_history_points: {
+        Row: {
+          as_of_date: string
+          base_currency: string
+          created_at: string
+          cumulative_contributions_base: number | null
+          id: string
+          notes: string | null
+          source: string
+          total_value_base: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          as_of_date: string
+          base_currency: string
+          created_at?: string
+          cumulative_contributions_base?: number | null
+          id?: string
+          notes?: string | null
+          source?: string
+          total_value_base: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          as_of_date?: string
+          base_currency?: string
+          created_at?: string
+          cumulative_contributions_base?: number | null
+          id?: string
+          notes?: string | null
+          source?: string
+          total_value_base?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_value_history_points_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_xirr_cash_flow_items: {
+        Row: {
+          amount_base: number
+          base_currency: string
+          created_at: string
+          description: string | null
+          flow_date: string
+          flow_kind: string
+          id: string
+          legacy_external_flow_id: string | null
+          operation_id: string | null
+          sequence_no: number
+          source_kind: string
+          workspace_id: string
+          xirr_snapshot_id: string
+        }
+        Insert: {
+          amount_base: number
+          base_currency: string
+          created_at?: string
+          description?: string | null
+          flow_date: string
+          flow_kind: string
+          id?: string
+          legacy_external_flow_id?: string | null
+          operation_id?: string | null
+          sequence_no: number
+          source_kind: string
+          workspace_id: string
+          xirr_snapshot_id: string
+        }
+        Update: {
+          amount_base?: number
+          base_currency?: string
+          created_at?: string
+          description?: string | null
+          flow_date?: string
+          flow_kind?: string
+          id?: string
+          legacy_external_flow_id?: string | null
+          operation_id?: string | null
+          sequence_no?: number
+          source_kind?: string
+          workspace_id?: string
+          xirr_snapshot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_xirr_cash_flow_items_legacy_external_flow_id_fkey"
+            columns: ["legacy_external_flow_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_legacy_external_flows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_cash_flow_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_operation_legs"
+            referencedColumns: ["operation_id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_cash_flow_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_cash_flow_items_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_xirr_cash_flow_items_xirr_snapshot_id_fkey"
+            columns: ["xirr_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_xirr_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_xirr_snapshots: {
         Row: {
           as_of_date: string
@@ -899,6 +1030,8 @@ export type Database = {
           notes: string | null
           report_run_id: string | null
           source: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_cash_value_base: number | null
+          terminal_invested_value_base: number | null
           terminal_value_base: number | null
           updated_at: string
           workspace_id: string
@@ -915,6 +1048,8 @@ export type Database = {
           notes?: string | null
           report_run_id?: string | null
           source?: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_cash_value_base?: number | null
+          terminal_invested_value_base?: number | null
           terminal_value_base?: number | null
           updated_at?: string
           workspace_id: string
@@ -931,6 +1066,8 @@ export type Database = {
           notes?: string | null
           report_run_id?: string | null
           source?: Database["public"]["Enums"]["portfolio_data_source"]
+          terminal_cash_value_base?: number | null
+          terminal_invested_value_base?: number | null
           terminal_value_base?: number | null
           updated_at?: string
           workspace_id?: string
@@ -1667,6 +1804,10 @@ export type Database = {
         Returns: string
       }
       create_monthly_report_run: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: string
+      }
+      create_monthly_report_run_with_xirr: {
         Args: { p_as_of_date: string; p_workspace_id: string }
         Returns: string
       }

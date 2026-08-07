@@ -11,6 +11,7 @@ import {
   type MonthlyReportItem,
   type MonthlyReportRun,
   type MonthlyXirrSnapshot,
+  type PortfolioValueHistoryRecord,
 } from "@/lib/reports/monthly-chart-data";
 
 import {
@@ -276,6 +277,7 @@ export default async function MonthlyReportDetailsPage({
     reportResult,
     itemsResult,
     historyResult,
+    legacyHistoryResult,
     xirrHistoryResult,
   ] = await Promise.all([
     supabase
@@ -339,6 +341,21 @@ export default async function MonthlyReportDetailsPage({
       }),
 
     supabase
+      .from(
+        "portfolio_value_history_points",
+      )
+      .select(
+        "id, workspace_id, as_of_date, total_value_base, cumulative_contributions_base, base_currency, source, notes",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .order("as_of_date", {
+        ascending: true,
+      }),
+
+    supabase
       .from("portfolio_xirr_snapshots")
       .select(
         "id, workspace_id, report_run_id, as_of_date, xirr_rate, terminal_value_base, terminal_invested_value_base, terminal_cash_value_base, cash_flow_count, calculation_version, created_at",
@@ -392,6 +409,17 @@ export default async function MonthlyReportDetailsPage({
     );
   }
 
+  if (legacyHistoryResult.error) {
+    console.error(
+      "Legacy portfolio history query failed:",
+      legacyHistoryResult.error,
+    );
+
+    throw new Error(
+      "The historical portfolio-value series could not be loaded.",
+    );
+  }
+
   if (xirrHistoryResult.error) {
     console.error(
       "Monthly report XIRR history query failed:",
@@ -414,6 +442,10 @@ export default async function MonthlyReportDetailsPage({
     (historyResult.data ??
       []) as MonthlyReportRun[];
 
+  const legacyHistoryPoints =
+    (legacyHistoryResult.data ??
+      []) as PortfolioValueHistoryRecord[];
+
   const xirrSnapshots =
     (xirrHistoryResult.data ??
       []) as MonthlyXirrSnapshot[];
@@ -423,6 +455,7 @@ export default async function MonthlyReportDetailsPage({
       reportRun,
       reportItems,
       historyRuns,
+      legacyHistoryPoints,
       xirrSnapshots,
     });
 
@@ -521,8 +554,7 @@ export default async function MonthlyReportDetailsPage({
           </p>
 
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-            {report.asOfDate} · Revision{" "}
-            {report.revision}
+            {report.asOfDate}
           </h1>
 
           <p className="mt-2 text-sm text-slate-600">
@@ -735,7 +767,7 @@ export default async function MonthlyReportDetailsPage({
                 This report does not contain frozen
                 cumulative-contribution data. Configure
                 a contribution baseline and create a
-                new report revision.
+                new report.
             </div>
         )}
 
@@ -936,10 +968,9 @@ export default async function MonthlyReportDetailsPage({
             </>
           ) : (
             <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-800">
-              This report revision does not have a
-              frozen XIRR snapshot. Create a new
-              report revision with the current
-              reporting workflow.
+              This report does not have a frozen
+              XIRR snapshot. Create the report again
+              with the current reporting workflow.
             </div>
           )}
 
@@ -967,7 +998,7 @@ export default async function MonthlyReportDetailsPage({
                         <p className="mt-1 text-xs text-slate-500">
                           {point.revision !==
                           null
-                            ? `Report revision ${point.revision}`
+                            ? "Frozen report"
                             : "Legacy checkpoint"}
                           {" · "}
                           {
@@ -1240,8 +1271,11 @@ export default async function MonthlyReportDetailsPage({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              The latest non-voided revision for
-              every report date is included.
+              Historical checkpoints are shown from
+              2025-11-12. For a date with a frozen
+              monthly report, that report takes
+              precedence over the imported historical
+              checkpoint.
             </p>
           </div>
 
@@ -1272,7 +1306,7 @@ export default async function MonthlyReportDetailsPage({
                 (point) => (
                   <li
                     key={
-                      point.reportRunId
+                      point.historyPointId
                     }
                     className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
                   >
@@ -1282,9 +1316,10 @@ export default async function MonthlyReportDetailsPage({
                       </p>
 
                       <p className="mt-1 text-xs text-slate-500">
-                        Revision{" "}
-                        {point.revision} ·{" "}
-                        {point.status}
+                        {point.source ===
+                        "report"
+                          ? `Frozen report · ${point.status}`
+                          : "Imported historical checkpoint"}
                       </p>
                     </div>
 
@@ -1334,7 +1369,7 @@ export default async function MonthlyReportDetailsPage({
               This report history does not contain
               frozen cumulative-contribution values.
               Configure a contribution baseline and
-              create a new report revision.
+              create a new report.
             </div>
           )}
         </section>

@@ -887,6 +887,53 @@ export type Database = {
           },
         ]
       }
+      portfolio_value_history_points: {
+        Row: {
+          as_of_date: string
+          base_currency: string
+          created_at: string
+          cumulative_contributions_base: number | null
+          id: string
+          notes: string | null
+          source: string
+          total_value_base: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          as_of_date: string
+          base_currency: string
+          created_at?: string
+          cumulative_contributions_base?: number | null
+          id?: string
+          notes?: string | null
+          source?: string
+          total_value_base: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          as_of_date?: string
+          base_currency?: string
+          created_at?: string
+          cumulative_contributions_base?: number | null
+          id?: string
+          notes?: string | null
+          source?: string
+          total_value_base?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_value_history_points_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_xirr_cash_flow_items: {
         Row: {
           amount_base: number

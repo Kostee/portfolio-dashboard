@@ -916,7 +916,7 @@ export async function createMonthlyReportSnapshot(
     data: reportRunId,
     error,
   } = await supabase.rpc(
-    "create_monthly_report_run",
+    "create_monthly_report_run_with_xirr",
     {
       p_workspace_id:
         membership.workspace_id,

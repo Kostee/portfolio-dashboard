@@ -5,10 +5,12 @@ import {
 } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database.types";
 import {
   buildMonthlyChartData,
   type MonthlyReportItem,
   type MonthlyReportRun,
+  type MonthlyXirrSnapshot,
 } from "@/lib/reports/monthly-chart-data";
 
 import {
@@ -40,6 +42,18 @@ type MonthlyReportDetailsPageProps = {
     reportRunId: string;
   }>;
 };
+
+type XirrCashFlowItem = Pick<
+  Database["public"]["Tables"]["portfolio_xirr_cash_flow_items"]["Row"],
+  | "id"
+  | "sequence_no"
+  | "flow_date"
+  | "flow_kind"
+  | "amount_base"
+  | "base_currency"
+  | "source_kind"
+  | "description"
+>;
 
 type PreviewBarProps = {
   label: string;
@@ -95,6 +109,24 @@ function formatPercentage(
       maximumFractionDigits: 1,
     },
   ).format(value);
+}
+
+function formatXirrPercentage(
+  rate: number,
+): string {
+  const percentage =
+    rate * 100;
+
+  const sign =
+    percentage > 0 ? "+" : "";
+
+  return `${sign}${new Intl.NumberFormat(
+    "en-GB",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  ).format(percentage)}%`;
 }
 
 function formatDateTime(
@@ -244,6 +276,7 @@ export default async function MonthlyReportDetailsPage({
     reportResult,
     itemsResult,
     historyResult,
+    xirrHistoryResult,
   ] = await Promise.all([
     supabase
       .from("portfolio_report_runs")
@@ -304,6 +337,22 @@ export default async function MonthlyReportDetailsPage({
       .order("revision", {
         ascending: true,
       }),
+
+    supabase
+      .from("portfolio_xirr_snapshots")
+      .select(
+        "id, workspace_id, report_run_id, as_of_date, xirr_rate, terminal_value_base, terminal_invested_value_base, terminal_cash_value_base, cash_flow_count, calculation_version, created_at",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .order("as_of_date", {
+        ascending: true,
+      })
+      .order("created_at", {
+        ascending: true,
+      }),
   ]);
 
   if (reportResult.error) {
@@ -343,6 +392,17 @@ export default async function MonthlyReportDetailsPage({
     );
   }
 
+  if (xirrHistoryResult.error) {
+    console.error(
+      "Monthly report XIRR history query failed:",
+      xirrHistoryResult.error,
+    );
+
+    throw new Error(
+      "The XIRR history could not be loaded.",
+    );
+  }
+
   const reportRun =
     reportResult.data as MonthlyReportRun;
 
@@ -354,15 +414,65 @@ export default async function MonthlyReportDetailsPage({
     (historyResult.data ??
       []) as MonthlyReportRun[];
 
+  const xirrSnapshots =
+    (xirrHistoryResult.data ??
+      []) as MonthlyXirrSnapshot[];
+
   const chartData =
     buildMonthlyChartData({
       reportRun,
       reportItems,
       historyRuns,
+      xirrSnapshots,
     });
 
   const report =
     chartData.report;
+
+  const currentXirr =
+    chartData.xirr.current;
+
+  let xirrCashFlowItems:
+    XirrCashFlowItem[] = [];
+
+  if (currentXirr) {
+    const {
+      data: xirrCashFlowData,
+      error: xirrCashFlowError,
+    } = await supabase
+      .from(
+        "portfolio_xirr_cash_flow_items",
+      )
+      .select(
+        "id, sequence_no, flow_date, flow_kind, amount_base, base_currency, source_kind, description",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .eq(
+        "xirr_snapshot_id",
+        currentXirr.xirrSnapshotId,
+      )
+      .order("sequence_no", {
+        ascending: true,
+      });
+
+    if (xirrCashFlowError) {
+      console.error(
+        "Frozen XIRR cash-flow query failed:",
+        xirrCashFlowError,
+      );
+
+      throw new Error(
+        "The frozen XIRR cash-flow vector could not be loaded.",
+      );
+    }
+
+    xirrCashFlowItems =
+      (xirrCashFlowData ??
+        []) as XirrCashFlowItem[];
+  }
 
   const contributionReturnPercentage =
     report.cumulativeContributionsBase !==
@@ -436,7 +546,7 @@ export default async function MonthlyReportDetailsPage({
           </div>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
               Total invested assets
@@ -529,6 +639,36 @@ export default async function MonthlyReportDetailsPage({
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
+              Annualised XIRR
+            </p>
+
+            {currentXirr ? (
+              <>
+                <p
+                  className={
+                    currentXirr.xirrRate >= 0
+                      ? "mt-2 text-2xl font-semibold text-emerald-700"
+                      : "mt-2 text-2xl font-semibold text-red-700"
+                  }
+                >
+                  {formatXirrPercentage(
+                    currentXirr.xirrRate,
+                  )}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  PPK excluded · non-PPK cash included
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-lg font-semibold text-amber-700">
+                Not available
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">
               Frozen items
             </p>
 
@@ -598,6 +738,266 @@ export default async function MonthlyReportDetailsPage({
                 new report revision.
             </div>
         )}
+
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">
+                Performance
+              </p>
+
+              <h2 className="mt-2 text-xl font-semibold">
+                XIRR
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Annualised money-weighted return.
+                Contributions are negative cash
+                flows, withdrawals are positive,
+                and the terminal value includes
+                non-PPK invested assets plus
+                non-PPK free cash.
+              </p>
+            </div>
+
+            {currentXirr && (
+              <p
+                className={
+                  currentXirr.xirrRate >= 0
+                    ? "text-2xl font-semibold text-emerald-700"
+                    : "text-2xl font-semibold text-red-700"
+                }
+              >
+                {formatXirrPercentage(
+                  currentXirr.xirrRate,
+                )}
+              </p>
+            )}
+          </div>
+
+          {currentXirr ? (
+            <>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">
+                    Non-PPK invested assets
+                  </p>
+
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatAmount(
+                      currentXirr
+                        .terminalInvestedValueBase ??
+                        0,
+                    )}{" "}
+                    {report.baseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">
+                    Non-PPK free cash
+                  </p>
+
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatSignedAmount(
+                      currentXirr
+                        .terminalCashValueBase ??
+                        0,
+                    )}{" "}
+                    {report.baseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">
+                    XIRR terminal value
+                  </p>
+
+                  <p className="mt-2 text-lg font-semibold">
+                    {formatAmount(
+                      currentXirr
+                        .terminalValueBase ??
+                        0,
+                    )}{" "}
+                    {report.baseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">
+                    Frozen cash flows
+                  </p>
+
+                  <p className="mt-2 text-lg font-semibold">
+                    {currentXirr.cashFlowCount ??
+                      xirrCashFlowItems.length}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    {
+                      currentXirr
+                        .calculationVersion
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <details className="mt-6 rounded-xl border border-slate-200 bg-slate-50">
+                <summary className="cursor-pointer px-5 py-4 font-medium text-slate-900">
+                  Audit frozen XIRR cash-flow vector
+                </summary>
+
+                <div className="overflow-x-auto border-t border-slate-200 bg-white">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">
+                          #
+                        </th>
+
+                        <th className="px-4 py-3">
+                          Date
+                        </th>
+
+                        <th className="px-4 py-3">
+                          Kind
+                        </th>
+
+                        <th className="px-4 py-3">
+                          Amount
+                        </th>
+
+                        <th className="px-4 py-3">
+                          Source
+                        </th>
+
+                        <th className="px-4 py-3">
+                          Description
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-200">
+                      {xirrCashFlowItems.map(
+                        (item) => (
+                          <tr key={item.id}>
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                              {item.sequence_no}
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3">
+                              {item.flow_date}
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 capitalize">
+                              {item.flow_kind.replaceAll(
+                                "_",
+                                " ",
+                              )}
+                            </td>
+
+                            <td
+                              className={
+                                Number(
+                                  item.amount_base,
+                                ) >= 0
+                                  ? "whitespace-nowrap px-4 py-3 font-medium text-emerald-700"
+                                  : "whitespace-nowrap px-4 py-3 font-medium text-slate-900"
+                              }
+                            >
+                              {formatSignedAmount(
+                                Number(
+                                  item.amount_base,
+                                ),
+                              )}{" "}
+                              {
+                                item.base_currency
+                              }
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                              {item.source_kind.replaceAll(
+                                "_",
+                                " ",
+                              )}
+                            </td>
+
+                            <td className="min-w-64 px-4 py-3 text-slate-600">
+                              {item.description ??
+                                "—"}
+                            </td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </>
+          ) : (
+            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-800">
+              This report revision does not have a
+              frozen XIRR snapshot. Create a new
+              report revision with the current
+              reporting workflow.
+            </div>
+          )}
+
+          <div className="mt-6">
+            <h3 className="font-semibold">
+              XIRR history
+            </h3>
+
+            {chartData.xirr.history.length >
+            0 ? (
+              <ul className="mt-4 divide-y divide-slate-200">
+                {chartData.xirr.history.map(
+                  (point) => (
+                    <li
+                      key={
+                        point.xirrSnapshotId
+                      }
+                      className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {point.asOfDate}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {point.revision !==
+                          null
+                            ? `Report revision ${point.revision}`
+                            : "Legacy checkpoint"}
+                          {" · "}
+                          {
+                            point.calculationVersion
+                          }
+                        </p>
+                      </div>
+
+                      <p
+                        className={
+                          point.xirrRate >= 0
+                            ? "font-semibold text-emerald-700"
+                            : "font-semibold text-red-700"
+                        }
+                      >
+                        {formatXirrPercentage(
+                          point.xirrRate,
+                        )}
+                      </p>
+                    </li>
+                  ),
+                )}
+              </ul>
+            ) : (
+              <p className="mt-4 text-sm text-slate-600">
+                No XIRR history is available.
+              </p>
+            )}
+          </div>
+        </section>
 
         {/* 1. GPW */}
 

@@ -71,6 +71,12 @@ type ReportItem = Pick<
   | "source_snapshot_date"
 >;
 
+type XirrSnapshotSummary = Pick<
+  Database["public"]["Tables"]["portfolio_xirr_snapshots"]["Row"],
+  | "report_run_id"
+  | "xirr_rate"
+>;
+
 const ERROR_MESSAGES: Record<
   string,
   string
@@ -155,6 +161,24 @@ function formatAmount(
     minimumFractionDigits: 2,
     maximumFractionDigits: 8,
   }).format(value);
+}
+
+function formatXirrPercentage(
+  rate: number,
+): string {
+  const percentage =
+    rate * 100;
+
+  const sign =
+    percentage > 0 ? "+" : "";
+
+  return `${sign}${new Intl.NumberFormat(
+    "en-GB",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  ).format(percentage)}%`;
 }
 
 function formatDateTime(
@@ -322,6 +346,7 @@ export default async function MonthlyReportPage({
     unitPositionsResult,
     reportedBalancesResult,
     reportHistoryResult,
+    xirrSnapshotsResult,
   ] = await Promise.all([
     supabase
       .from("owners")
@@ -409,6 +434,25 @@ export default async function MonthlyReportPage({
           ascending: false,
       })
       .limit(20),
+
+    supabase
+      .from("portfolio_xirr_snapshots")
+      .select(
+        "report_run_id, xirr_rate",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .not(
+        "report_run_id",
+        "is",
+        null,
+      )
+      .order("as_of_date", {
+        ascending: false,
+      })
+      .limit(50),
     ]);
 
   if (ownersResult.error) {
@@ -467,6 +511,13 @@ export default async function MonthlyReportPage({
     );
   }
 
+  if (xirrSnapshotsResult.error) {
+    console.error(
+      "Monthly report XIRR query failed:",
+      xirrSnapshotsResult.error,
+    );
+  }
+
   const owners =
     ownersResult.data ?? [];
 
@@ -492,6 +543,24 @@ export default async function MonthlyReportPage({
 
   const reportHistory =
     reportHistoryResult.data ?? [];
+
+  const xirrSnapshots =
+    (xirrSnapshotsResult.data ??
+      []) as XirrSnapshotSummary[];
+
+  const xirrByReportRunId =
+    new Map(
+      xirrSnapshots
+        .filter(
+          (snapshot) =>
+            snapshot.report_run_id !==
+            null,
+        )
+        .map((snapshot) => [
+          snapshot.report_run_id as string,
+          Number(snapshot.xirr_rate),
+        ]),
+    );
 
   let selectedReport:
     ReportRun | null = null;
@@ -1653,7 +1722,7 @@ export default async function MonthlyReportPage({
                 </span>
                 </div>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl bg-white p-4">
                     <p className="text-xs text-slate-500">
                     Frozen items
@@ -1664,7 +1733,7 @@ export default async function MonthlyReportPage({
                     </p>
                 </div>
 
-                <div className="rounded-xl bg-white p-4 sm:col-span-2">
+                <div className="rounded-xl bg-white p-4 lg:col-span-2">
                     <p className="text-xs text-slate-500">
                     Total invested assets
                     </p>
@@ -1681,6 +1750,28 @@ export default async function MonthlyReportPage({
                     <p className="mt-1 text-xs text-slate-500">
                     Cash balances excluded
                     </p>
+                </div>
+
+                <div className="rounded-xl bg-white p-4">
+                    <p className="text-xs text-slate-500">
+                    Annualised XIRR
+                    </p>
+
+                    {xirrByReportRunId.has(
+                      selectedReport.id,
+                    ) ? (
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">
+                        {formatXirrPercentage(
+                          xirrByReportRunId.get(
+                            selectedReport.id,
+                          ) ?? 0,
+                        )}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-lg font-semibold text-amber-700">
+                        Not available
+                      </p>
+                    )}
                 </div>
                 </div>
 
@@ -1823,15 +1914,30 @@ export default async function MonthlyReportPage({
                             </p>
                         </div>
 
-                        <p className="font-semibold text-slate-900">
-                            {formatAmount(
-                            Number(
-                                report.total_value_base ??
-                                0,
-                            ),
-                            )}{" "}
-                            {report.base_currency}
-                        </p>
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-slate-900">
+                              {formatAmount(
+                              Number(
+                                  report.total_value_base ??
+                                  0,
+                              ),
+                              )}{" "}
+                              {report.base_currency}
+                          </p>
+
+                          {xirrByReportRunId.has(
+                            report.report_run_id,
+                          ) && (
+                            <p className="mt-1 text-xs font-medium text-slate-500">
+                              XIRR{" "}
+                              {formatXirrPercentage(
+                                xirrByReportRunId.get(
+                                  report.report_run_id,
+                                ) ?? 0,
+                              )}
+                            </p>
+                          )}
+                        </div>
                         </Link>
                     </li>
                     );

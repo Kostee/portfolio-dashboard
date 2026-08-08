@@ -398,6 +398,198 @@ export type Database = {
           },
         ]
       }
+      market_data_instrument_sources: {
+        Row: {
+          created_at: string
+          id: string
+          instrument_id: string
+          is_enabled: boolean
+          notes: string | null
+          priority: number
+          provider: string
+          provider_symbol: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instrument_id: string
+          is_enabled?: boolean
+          notes?: string | null
+          priority: number
+          provider: string
+          provider_symbol: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          is_enabled?: boolean
+          notes?: string | null
+          priority?: number
+          provider?: string
+          provider_symbol?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_data_instrument_sources_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "market_data_instrument_sources_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_data_sync_items: {
+        Row: {
+          created_at: string
+          currency: string | null
+          error_message: string | null
+          id: string
+          instrument_id: string | null
+          item_key: string
+          item_type: string
+          provider: string
+          provider_symbol: string | null
+          raw_metadata: Json | null
+          run_id: string
+          source_date: string | null
+          status: string
+          value: number | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          instrument_id?: string | null
+          item_key: string
+          item_type: string
+          provider: string
+          provider_symbol?: string | null
+          raw_metadata?: Json | null
+          run_id: string
+          source_date?: string | null
+          status: string
+          value?: number | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          instrument_id?: string | null
+          item_key?: string
+          item_type?: string
+          provider?: string
+          provider_symbol?: string | null
+          raw_metadata?: Json | null
+          run_id?: string
+          source_date?: string | null
+          status?: string
+          value?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_data_sync_items_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "market_data_sync_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "market_data_sync_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_data_sync_items_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_data_sync_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          fx_failure_count: number
+          fx_success_count: number
+          id: string
+          instrument_failure_count: number
+          instrument_success_count: number
+          market_data_through_date: string
+          notes: string | null
+          started_at: string
+          status: string
+          target_saturday: string
+          trigger_source: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          fx_failure_count?: number
+          fx_success_count?: number
+          id?: string
+          instrument_failure_count?: number
+          instrument_success_count?: number
+          market_data_through_date: string
+          notes?: string | null
+          started_at?: string
+          status: string
+          target_saturday: string
+          trigger_source?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          fx_failure_count?: number
+          fx_success_count?: number
+          id?: string
+          instrument_failure_count?: number
+          instrument_success_count?: number
+          market_data_through_date?: string
+          notes?: string | null
+          started_at?: string
+          status?: string
+          target_saturday?: string
+          trigger_source?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_data_sync_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       owners: {
         Row: {
           created_at: string
@@ -1761,6 +1953,10 @@ export type Database = {
       }
     }
     Functions: {
+      apply_monthly_market_proposals: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: number
+      }
       create_cash_operation: {
         Args: {
           p_account_id: string
@@ -1876,6 +2072,33 @@ export type Database = {
           p_timezone?: string
         }
         Returns: string
+      }
+      get_monthly_market_proposals: {
+        Args: { p_as_of_date: string; p_workspace_id: string }
+        Returns: {
+          account_id: string
+          account_name: string
+          currency: string
+          existing_snapshot_date: string
+          existing_valuation_status: string
+          fx_rate_date: string
+          fx_rate_to_base: number
+          instrument_exchange: string
+          instrument_id: string
+          instrument_name: string
+          instrument_ticker: string
+          market_value: number
+          market_value_base: number
+          owner_name: string
+          proposal_status: string
+          provider_name: string
+          quantity: number
+          quote_date: string
+          quote_notes: string
+          quote_provider: string
+          quote_provider_symbol: string
+          unit_price: number
+        }[]
       }
       get_portfolio_cash_balances_as_of: {
         Args: { p_as_of_date: string; p_workspace_id: string }
@@ -2011,6 +2234,7 @@ export type Database = {
         | "market_data"
         | "broker_sync"
         | "system"
+        | "automatic"
       portfolio_operation_component:
         | "principal"
         | "fee"
@@ -2195,6 +2419,7 @@ export const Constants = {
         "market_data",
         "broker_sync",
         "system",
+        "automatic",
       ],
       portfolio_operation_component: [
         "principal",

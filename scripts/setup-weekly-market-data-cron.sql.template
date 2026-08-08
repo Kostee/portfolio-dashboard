@@ -1,0 +1,136 @@
+-- Run this in Supabase SQL Editor AFTER:
+-- 1) deploying the Edge Function,
+-- 2) setting MARKET_SYNC_CRON_SECRET in Edge Function secrets,
+-- 3) replacing the three placeholders below with your own values.
+--
+-- Do NOT commit a filled-in copy of this file.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Supabase Vault is available on hosted projects.
+-- The secret API below uses vault.create_secret(...).
+
+-- First-time setup only.
+-- Keep these values private.
+select vault.create_secret(
+  'https://YOUR_PROJECT_REF.supabase.co',
+  'market_sync_project_url'
+);
+
+select vault.create_secret(
+  'YOUR_SUPABASE_PUBLISHABLE_KEY',
+  'market_sync_publishable_key'
+);
+
+select vault.create_secret(
+  'YOUR_MARKET_SYNC_CRON_SECRET',
+  'market_sync_cron_secret'
+);
+
+-- Supabase Cron runs in GMT/UTC.
+-- Europe/Warsaw is UTC+2 in summer and UTC+1 in winter.
+--
+-- Therefore we invoke at both possible UTC times.
+-- The Edge Function itself accepts only the call that lands
+-- inside 08:05-08:20 Europe/Warsaw and returns a no-op for the other.
+-- This makes the schedule DST-safe without manual clock changes.
+
+select cron.schedule(
+  'weekly-market-sync-0610-utc',
+  '10 6 * * 6',
+  $$
+  select net.http_post(
+    url :=
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_project_url'
+        order by created_at desc
+        limit 1
+      )
+      || '/functions/v1/sync-weekly-market-data',
+    headers := jsonb_build_object(
+      'Content-Type',
+      'application/json',
+      'apikey',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_publishable_key'
+        order by created_at desc
+        limit 1
+      ),
+      'x-market-sync-secret',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_cron_secret'
+        order by created_at desc
+        limit 1
+      )
+    ),
+    body := jsonb_build_object(
+      'trigger',
+      'cron'
+    ),
+    timeout_milliseconds := 120000
+  ) as request_id;
+  $$
+);
+
+select cron.schedule(
+  'weekly-market-sync-0710-utc',
+  '10 7 * * 6',
+  $$
+  select net.http_post(
+    url :=
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_project_url'
+        order by created_at desc
+        limit 1
+      )
+      || '/functions/v1/sync-weekly-market-data',
+    headers := jsonb_build_object(
+      'Content-Type',
+      'application/json',
+      'apikey',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_publishable_key'
+        order by created_at desc
+        limit 1
+      ),
+      'x-market-sync-secret',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_cron_secret'
+        order by created_at desc
+        limit 1
+      )
+    ),
+    body := jsonb_build_object(
+      'trigger',
+      'cron'
+    ),
+    timeout_milliseconds := 120000
+  ) as request_id;
+  $$
+);
+
+-- Verification:
+select
+  jobid,
+  jobname,
+  schedule,
+  active
+from cron.job
+where jobname in (
+  'weekly-market-sync-0610-utc',
+  'weekly-market-sync-0710-utc'
+)
+order by jobname;

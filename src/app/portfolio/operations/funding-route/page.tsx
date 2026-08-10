@@ -393,7 +393,7 @@ export default async function FundingRoutePage({
                     min="0.01"
                     step="0.01"
                     required
-                    placeholder="240.00"
+                    placeholder="1000.00"
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   />
                 </div>
@@ -469,7 +469,7 @@ export default async function FundingRoutePage({
                       min="0.00000001"
                       step="0.00000001"
                       required
-                      placeholder="55.82"
+                      placeholder="250.50"
                       className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                     />
                   </div>
@@ -524,7 +524,7 @@ export default async function FundingRoutePage({
                     type="number"
                     min="0"
                     step="0.00000001"
-                    placeholder="0.12"
+                    placeholder="0.50"
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   />
 
@@ -550,7 +550,7 @@ export default async function FundingRoutePage({
                     min="0.00000001"
                     step="0.00000001"
                     required
-                    placeholder="55.70"
+                    placeholder="250.00"
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   />
                 </div>
@@ -707,7 +707,7 @@ export default async function FundingRoutePage({
                     min="0.00000001"
                     step="0.00000001"
                     required
-                    placeholder="55.70"
+                    placeholder="250.00"
                     className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   />
                 </div>

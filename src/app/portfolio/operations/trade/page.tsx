@@ -55,6 +55,10 @@ const ERROR_MESSAGES: Record<
     "The cash currency must match the selected account currency.",
   creation_failed:
     "The trade could not be posted. Check the values and server log.",
+  funding_route_invalid:
+    "The selected funding route is unavailable.",
+  funding_route_account_mismatch:
+    "The selected funding route belongs to a different destination account.",
 };
 
 export default async function TradePage({
@@ -99,7 +103,8 @@ export default async function TradePage({
     providersResult,
     accountsResult,
     instrumentsResult,
-  ] = await Promise.all([
+    fundingRoutesResult,
+] = await Promise.all([
     supabase
       .from("workspaces")
       .select(
@@ -148,6 +153,23 @@ export default async function TradePage({
       )
       .eq("is_active", true)
       .eq("tracking_mode", "units"),
+
+    supabase
+      .from("portfolio_funding_routes")
+      .select(
+        "id, owner_id, contribution_date, contribution_amount_base, base_currency, destination_account_id, description, status",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .eq("status", "completed")
+      .order("contribution_date", {
+        ascending: false,
+      })
+      .order("created_at", {
+        ascending: false,
+      }),
   ]);
 
   const workspace = workspaceResult.data;
@@ -157,6 +179,9 @@ export default async function TradePage({
   const accounts = accountsResult.data ?? [];
   const instruments =
     instrumentsResult.data ?? [];
+
+  const fundingRoutes =
+    fundingRoutesResult.data ?? [];
 
   if (workspaceResult.error) {
     console.error(
@@ -190,6 +215,13 @@ export default async function TradePage({
     console.error(
       "Instruments query failed:",
       instrumentsResult.error,
+    );
+  }
+
+  if (fundingRoutesResult.error) {
+    console.error(
+      "Funding routes query failed:",
+      fundingRoutesResult.error,
     );
   }
 
@@ -624,6 +656,63 @@ export default async function TradePage({
                   {workspaceBaseCurrency}. For a
                   foreign-currency account, it may be
                   left empty and supplemented later.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="fundingRouteId"
+                  className="block text-sm font-medium text-slate-700"
+                >
+                  Funding route
+                  <span className="ml-1 font-normal text-slate-500">
+                    (optional)
+                  </span>
+                </label>
+
+                <select
+                  id="fundingRouteId"
+                  name="fundingRouteId"
+                  defaultValue=""
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="">
+                    None — ordinary trade
+                  </option>
+
+                  {fundingRoutes.map((route) => {
+                    const owner =
+                      ownerMap.get(
+                        route.owner_id,
+                      )?.display_name ?? "Owner";
+
+                    return (
+                      <option
+                        key={route.id}
+                        value={route.id}
+                      >
+                        {route.contribution_date}
+                        {" · "}
+                        {Number(
+                          route.contribution_amount_base,
+                        ).toFixed(2)}
+                        {" "}
+                        {route.base_currency}
+                        {" · "}
+                        {owner}
+                        {" · "}
+                        {route.description ??
+                          "External funding"}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Select this only when the trade belongs
+                  to a previously recorded external funding
+                  route. Its destination account must match
+                  the trade account.
                 </p>
               </div>
 

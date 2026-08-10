@@ -88,6 +88,11 @@ export async function createTradeOperation(
     "description",
   );
 
+  const fundingRouteId = readText(
+    formData,
+    "fundingRouteId",
+  );
+
   const quantity =
     parsePositiveNumber(rawQuantity);
 
@@ -308,26 +313,108 @@ export async function createTradeOperation(
     );
   }
 
-  const { error } = await supabase.rpc(
-    "create_trade_operation",
-    {
-      p_account_id: accountId,
-      p_instrument_id: instrumentId,
-      p_operation_date: operationDate,
-      p_operation_time:
-        operationTime || undefined,
-      p_operation_type: operationType,
-      p_quantity: quantity,
-      p_actual_cash_amount:
-        actualCashAmount,
-      p_cash_currency: cashCurrency,
-      p_fee_amount: feeAmount,
-      p_tax_amount: taxAmount,
-      p_base_value: baseValue,
-      p_description:
-        description || undefined,
-    },
-  );
+  if (fundingRouteId) {
+    const {
+      data: fundingRoute,
+      error: fundingRouteError,
+    } = await supabase
+      .from("portfolio_funding_routes")
+      .select(
+        "id, destination_account_id, status",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .eq("id", fundingRouteId)
+      .maybeSingle();
+
+    if (
+      fundingRouteError ||
+      !fundingRoute ||
+      fundingRoute.status !== "completed"
+    ) {
+      console.error(
+        "Funding route validation failed:",
+        fundingRouteError,
+      );
+
+      redirect(
+        `${TRADE_ERROR_PATH}?error=funding_route_invalid`,
+      );
+    }
+
+    if (
+      fundingRoute.destination_account_id !==
+      accountId
+    ) {
+      redirect(
+        `${TRADE_ERROR_PATH}?error=funding_route_account_mismatch`,
+      );
+    }
+  }
+
+  const { error } = fundingRouteId
+    ? await supabase.rpc(
+        "create_funding_route_trade",
+        {
+          p_funding_route_id:
+            fundingRouteId,
+          p_account_id:
+            accountId,
+          p_instrument_id:
+            instrumentId,
+          p_operation_date:
+            operationDate,
+          p_operation_time:
+            operationTime || undefined,
+          p_operation_type:
+            operationType,
+          p_quantity:
+            quantity,
+          p_actual_cash_amount:
+            actualCashAmount,
+          p_cash_currency:
+            cashCurrency,
+          p_fee_amount:
+            feeAmount,
+          p_tax_amount:
+            taxAmount,
+          p_base_value:
+            baseValue,
+          p_description:
+            description || undefined,
+        },
+      )
+    : await supabase.rpc(
+        "create_trade_operation",
+        {
+          p_account_id:
+            accountId,
+          p_instrument_id:
+            instrumentId,
+          p_operation_date:
+            operationDate,
+          p_operation_time:
+            operationTime || undefined,
+          p_operation_type:
+            operationType,
+          p_quantity:
+            quantity,
+          p_actual_cash_amount:
+            actualCashAmount,
+          p_cash_currency:
+            cashCurrency,
+          p_fee_amount:
+            feeAmount,
+          p_tax_amount:
+            taxAmount,
+          p_base_value:
+            baseValue,
+          p_description:
+            description || undefined,
+        },
+      );
 
   if (error) {
     console.error(

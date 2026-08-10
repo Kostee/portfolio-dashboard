@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -11,6 +11,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -672,6 +697,166 @@ export type Database = {
           },
         ]
       }
+      portfolio_funding_route_steps: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          exchange_channel_id: string | null
+          fee_amount: number | null
+          fee_currency: string | null
+          from_amount: number | null
+          from_currency: string | null
+          from_location: string | null
+          funding_route_id: string
+          id: string
+          notes: string | null
+          occurred_at: string | null
+          sequence_no: number
+          step_date: string
+          step_type: string
+          to_amount: number | null
+          to_currency: string | null
+          to_location: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          exchange_channel_id?: string | null
+          fee_amount?: number | null
+          fee_currency?: string | null
+          from_amount?: number | null
+          from_currency?: string | null
+          from_location?: string | null
+          funding_route_id: string
+          id?: string
+          notes?: string | null
+          occurred_at?: string | null
+          sequence_no: number
+          step_date: string
+          step_type: string
+          to_amount?: number | null
+          to_currency?: string | null
+          to_location?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          exchange_channel_id?: string | null
+          fee_amount?: number | null
+          fee_currency?: string | null
+          from_amount?: number | null
+          from_currency?: string | null
+          from_location?: string | null
+          funding_route_id?: string
+          id?: string
+          notes?: string | null
+          occurred_at?: string | null
+          sequence_no?: number
+          step_date?: string
+          step_type?: string
+          to_amount?: number | null
+          to_currency?: string | null
+          to_location?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_funding_route_steps_channel_fk"
+            columns: ["workspace_id", "exchange_channel_id"]
+            isOneToOne: false
+            referencedRelation: "exchange_channels"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_funding_route_steps_route_fk"
+            columns: ["workspace_id", "funding_route_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_funding_routes"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
+      portfolio_funding_routes: {
+        Row: {
+          base_currency: string
+          completed_at: string | null
+          contribution_amount_base: number
+          contribution_date: string
+          contribution_executed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          destination_account_id: string
+          id: string
+          notes: string | null
+          owner_id: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          base_currency: string
+          completed_at?: string | null
+          contribution_amount_base: number
+          contribution_date: string
+          contribution_executed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          destination_account_id: string
+          id?: string
+          notes?: string | null
+          owner_id: string
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          base_currency?: string
+          completed_at?: string | null
+          contribution_amount_base?: number
+          contribution_date?: string
+          contribution_executed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          destination_account_id?: string
+          id?: string
+          notes?: string | null
+          owner_id?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_funding_routes_destination_account_fk"
+            columns: ["workspace_id", "destination_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_funding_routes_owner_fk"
+            columns: ["workspace_id", "owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "portfolio_funding_routes_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_legacy_external_flows: {
         Row: {
           amount_base: number
@@ -827,6 +1012,7 @@ export type Database = {
           description: string | null
           executed_at: string | null
           external_reference: string | null
+          funding_route_id: string | null
           id: string
           notes: string | null
           operation_date: string
@@ -842,6 +1028,7 @@ export type Database = {
           description?: string | null
           executed_at?: string | null
           external_reference?: string | null
+          funding_route_id?: string | null
           id?: string
           notes?: string | null
           operation_date: string
@@ -857,6 +1044,7 @@ export type Database = {
           description?: string | null
           executed_at?: string | null
           external_reference?: string | null
+          funding_route_id?: string | null
           id?: string
           notes?: string | null
           operation_date?: string
@@ -867,6 +1055,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "portfolio_operations_funding_route_fk"
+            columns: ["workspace_id", "funding_route_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_funding_routes"
+            referencedColumns: ["workspace_id", "id"]
+          },
           {
             foreignKeyName: "portfolio_operations_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -1970,6 +2165,44 @@ export type Database = {
         }
         Returns: string
       }
+      create_completed_funding_route: {
+        Args: {
+          p_contribution_amount_base: number
+          p_contribution_date: string
+          p_contribution_time?: string
+          p_description?: string
+          p_destination_account_id: string
+          p_destination_amount: number
+          p_destination_currency: string
+          p_destination_date: string
+          p_destination_time?: string
+          p_notes?: string
+          p_owner_id: string
+          p_steps: Json
+          p_workspace_id: string
+        }
+        Returns: string
+      }
+      create_completed_funding_route_with_deposit_time: {
+        Args: {
+          p_contribution_amount_base: number
+          p_contribution_date: string
+          p_contribution_time?: string
+          p_deposit_date: string
+          p_deposit_time?: string
+          p_description?: string
+          p_destination_account_id: string
+          p_destination_amount: number
+          p_destination_currency: string
+          p_destination_date: string
+          p_destination_time?: string
+          p_notes?: string
+          p_owner_id: string
+          p_steps: Json
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       create_currency_exchange: {
         Args: {
           p_base_value?: number
@@ -1983,6 +2216,25 @@ export type Database = {
           p_to_account_id: string
           p_to_amount: number
           p_to_currency: string
+        }
+        Returns: string
+      }
+      create_funding_route_trade: {
+        Args: {
+          p_account_id: string
+          p_actual_cash_amount: number
+          p_base_value?: number
+          p_cash_currency: string
+          p_description?: string
+          p_fee_amount?: number
+          p_funding_route_id: string
+          p_instrument_id: string
+          p_notes?: string
+          p_operation_date: string
+          p_operation_time?: string
+          p_operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+          p_quantity: number
+          p_tax_amount?: number
         }
         Returns: string
       }
@@ -2390,6 +2642,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       account_type: [

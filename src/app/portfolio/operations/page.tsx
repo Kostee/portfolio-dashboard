@@ -410,6 +410,22 @@ export default async function OperationsPage({
           </Link>
 
           <Link
+            href="/portfolio/operations/funding-route"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">
+              External funding route
+            </p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Record a contribution routed through
+              Walutomat, Revolut or another external
+              channel before reaching a portfolio
+              account.
+            </p>
+          </Link>
+
+          <Link
             href="/portfolio/opening-state"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
           >

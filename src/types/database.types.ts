@@ -1321,6 +1321,163 @@ export type Database = {
           },
         ]
       }
+      portfolio_weekly_report_items: {
+        Row: {
+          asset_class_code: string | null
+          asset_class_color: string
+          asset_class_id: string | null
+          asset_class_name: string
+          asset_class_sort_order: number
+          bought_base: number
+          buy_quantity: number
+          created_at: string
+          id: string
+          instrument_id: string
+          instrument_name: string
+          instrument_ticker: string | null
+          net_quantity: number
+          net_value_base: number
+          operation_count: number
+          operation_ids: Json
+          report_run_id: string
+          sell_quantity: number
+          sold_base: number
+          workspace_id: string
+        }
+        Insert: {
+          asset_class_code?: string | null
+          asset_class_color: string
+          asset_class_id?: string | null
+          asset_class_name: string
+          asset_class_sort_order?: number
+          bought_base?: number
+          buy_quantity?: number
+          created_at?: string
+          id?: string
+          instrument_id: string
+          instrument_name: string
+          instrument_ticker?: string | null
+          net_quantity?: number
+          net_value_base?: number
+          operation_count?: number
+          operation_ids?: Json
+          report_run_id: string
+          sell_quantity?: number
+          sold_base?: number
+          workspace_id: string
+        }
+        Update: {
+          asset_class_code?: string | null
+          asset_class_color?: string
+          asset_class_id?: string | null
+          asset_class_name?: string
+          asset_class_sort_order?: number
+          bought_base?: number
+          buy_quantity?: number
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          instrument_name?: string
+          instrument_ticker?: string | null
+          net_quantity?: number
+          net_value_base?: number
+          operation_count?: number
+          operation_ids?: Json
+          report_run_id?: string
+          sell_quantity?: number
+          sold_base?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_weekly_report_items_asset_class_id_fkey"
+            columns: ["asset_class_id"]
+            isOneToOne: false
+            referencedRelation: "asset_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_weekly_report_items_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_weekly_report_items_report_run_id_fkey"
+            columns: ["report_run_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_weekly_report_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portfolio_weekly_report_items_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_weekly_report_runs: {
+        Row: {
+          base_currency: string
+          bought_base: number
+          created_at: string
+          external_contributions_base: number
+          from_date: string
+          fx_rates: Json
+          generated_at: string
+          id: string
+          item_count: number
+          net_trading_base: number
+          sold_base: number
+          to_date: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          base_currency: string
+          bought_base?: number
+          created_at?: string
+          external_contributions_base?: number
+          from_date: string
+          fx_rates?: Json
+          generated_at?: string
+          id?: string
+          item_count?: number
+          net_trading_base?: number
+          sold_base?: number
+          to_date: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          base_currency?: string
+          bought_base?: number
+          created_at?: string
+          external_contributions_base?: number
+          from_date?: string
+          fx_rates?: Json
+          generated_at?: string
+          id?: string
+          item_count?: number
+          net_trading_base?: number
+          sold_base?: number
+          to_date?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_weekly_report_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_xirr_cash_flow_items: {
         Row: {
           amount_base: number
@@ -2424,6 +2581,18 @@ export type Database = {
           valuation_unit_price: number
           workspace_id: string
         }[]
+      }
+      replace_weekly_operation_report: {
+        Args: {
+          p_bought_base: number
+          p_from_date: string
+          p_fx_rates: Json
+          p_items: Json
+          p_sold_base: number
+          p_to_date: string
+          p_workspace_id: string
+        }
+        Returns: string
       }
       upsert_cash_balance_snapshot: {
         Args: {

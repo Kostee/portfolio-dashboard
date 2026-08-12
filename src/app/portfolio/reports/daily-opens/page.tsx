@@ -34,6 +34,23 @@ function formatPrice(value: number): string {
   }).format(value);
 }
 
+function formatPercent(value: number): string {
+  const formatted = new Intl.NumberFormat("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(value));
+
+  if (value > 0) {
+    return `+${formatted}%`;
+  }
+
+  if (value < 0) {
+    return `-${formatted}%`;
+  }
+
+  return "0.00%";
+}
+
 function formatFetchedAt(value: string | null): string {
   if (!value) {
     return "—";
@@ -65,6 +82,51 @@ function getExchangeOrder(exchange: string | null): number {
     default:
       return 99;
   }
+}
+
+type PreviousOpenInfo = {
+  tradingDate: string;
+  openPrice: number;
+};
+
+async function loadPreviousOpenPrices(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  instrumentIds: string[],
+  selectedDate: string | null,
+): Promise<Map<string, PreviousOpenInfo>> {
+  const previousByInstrument = new Map<string, PreviousOpenInfo>();
+
+  if (!selectedDate || instrumentIds.length === 0) {
+    return previousByInstrument;
+  }
+
+  const { data, error } = await supabase
+    .from("instrument_daily_open_prices")
+    .select("instrument_id, trading_date, open_price")
+    .eq("workspace_id", workspaceId)
+    .in("instrument_id", instrumentIds)
+    .lt("trading_date", selectedDate)
+    .order("trading_date", { ascending: false })
+    .limit(1000);
+
+  if (error) {
+    console.error("Previous daily open query failed:", error);
+    return previousByInstrument;
+  }
+
+  for (const row of data ?? []) {
+    if (previousByInstrument.has(row.instrument_id)) {
+      continue;
+    }
+
+    previousByInstrument.set(row.instrument_id, {
+      tradingDate: row.trading_date,
+      openPrice: Number(row.open_price),
+    });
+  }
+
+  return previousByInstrument;
 }
 
 async function loadAllOpenHistory(
@@ -192,6 +254,13 @@ export default async function DailyOpensPage({
   ];
 
   let instruments: Instrument[] = [];
+
+  const previousOpenByInstrument = await loadPreviousOpenPrices(
+    supabase,
+    membership.workspace_id,
+    instrumentIds,
+    selectedDate,
+  );
 
   if (instrumentIds.length > 0) {
     const { data, error } = await supabase
@@ -509,6 +578,10 @@ export default async function DailyOpensPage({
                               Open
                             </th>
 
+                            <th className="px-4 py-3 text-right font-medium">
+                              Vs prev. open
+                            </th>
+
                             <th className="px-4 py-3 font-medium">
                               Provider
                             </th>
@@ -541,6 +614,18 @@ export default async function DailyOpensPage({
                                 price.instrument_id,
                               )}`;
 
+                            const previousOpen = previousOpenByInstrument.get(
+                              price.instrument_id,
+                            );
+
+                            const currentOpen = Number(price.open_price);
+
+                            const openChangePercent =
+                              previousOpen && previousOpen.openPrice > 0
+                                ? ((currentOpen / previousOpen.openPrice) - 1) *
+                                  100
+                                : null;
+
                             return (
                               <tr key={price.id}>
                                 <td className="px-4 py-3">
@@ -554,8 +639,39 @@ export default async function DailyOpensPage({
                                 </td>
 
                                 <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-900">
-                                  {formatPrice(Number(price.open_price))}{" "}
-                                  {price.currency}
+                                  {formatPrice(currentOpen)} {price.currency}
+                                </td>
+
+                                <td className="whitespace-nowrap px-4 py-3 text-right">
+                                  {openChangePercent === null ? (
+                                    <div>
+                                      <span className="text-sm font-medium text-slate-400">
+                                        —
+                                      </span>
+
+                                      <p className="mt-1 text-[11px] text-slate-400">
+                                        first observation
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <span
+                                        className={
+                                          openChangePercent > 0
+                                            ? "inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                                            : openChangePercent < 0
+                                              ? "inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"
+                                              : "inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"
+                                        }
+                                      >
+                                        {formatPercent(openChangePercent)}
+                                      </span>
+
+                                      <p className="mt-1 text-[11px] text-slate-400">
+                                        vs {previousOpen?.tradingDate}
+                                      </p>
+                                    </div>
+                                  )}
                                 </td>
 
                                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">

@@ -23,7 +23,7 @@ function formatQuantity(value: number): string {
 function formatAmount(value: number): string {
   return new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 8,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -41,43 +41,343 @@ function getAccountDescription(
     .join(" · ");
 }
 
-function sortUnitPositions(
+type InstrumentRow = Pick<
+  Database["public"]["Tables"]["instruments"]["Row"],
+  "id" | "name" | "ticker" | "asset_class_id"
+>;
+
+type AssetClassRow = Pick<
+  Database["public"]["Tables"]["asset_classes"]["Row"],
+  "id" | "name" | "code" | "color_hex" | "sort_order"
+>;
+
+type InstrumentPositionGroup = {
+  instrumentId: string;
+  instrumentName: string;
+  instrumentTicker: string | null;
+  assetClassId: string | null;
+  assetClassName: string;
+  assetClassCode: string | null;
+  assetClassColor: string;
+  assetClassSortOrder: number;
+  positions: ValuedUnitPosition[];
+  totalQuantity: number;
+  totalEstimatedBaseValue: number | null;
+  valuedPositionCount: number;
+  latestValuationDate: string | null;
+};
+
+type AssetClassPositionGroup = {
+  assetClassId: string | null;
+  assetClassName: string;
+  assetClassCode: string | null;
+  assetClassColor: string;
+  assetClassSortOrder: number;
+  instruments: InstrumentPositionGroup[];
+};
+
+const FALLBACK_ASSET_CLASS_NAME =
+  "Unclassified";
+
+const FALLBACK_ASSET_CLASS_COLOR =
+  "#64748b";
+
+function getEstimatedPositionBaseValue(
+  position: ValuedUnitPosition,
+  workspaceBaseCurrency: string,
+): number | null {
+  const quantity = Number(
+    position.quantity ?? 0,
+  );
+
+  const valuationBaseValue =
+    position.valuation_market_value_base ===
+    null
+      ? null
+      : Number(
+          position.valuation_market_value_base,
+        );
+
+  const valuationQuantity =
+    position.valuation_quantity === null
+      ? null
+      : Number(
+          position.valuation_quantity,
+        );
+
+  const valuationUnitPrice =
+    position.valuation_unit_price === null
+      ? null
+      : Number(
+          position.valuation_unit_price,
+        );
+
+  if (
+    position.valuation_status === "matched" &&
+    valuationBaseValue !== null
+  ) {
+    return valuationBaseValue;
+  }
+
+  if (
+    valuationBaseValue !== null &&
+    valuationQuantity !== null &&
+    valuationQuantity !== 0
+  ) {
+    return (
+      quantity *
+      (valuationBaseValue /
+        valuationQuantity)
+    );
+  }
+
+  if (
+    valuationUnitPrice !== null &&
+    position.valuation_currency ===
+      workspaceBaseCurrency
+  ) {
+    return quantity * valuationUnitPrice;
+  }
+
+  return null;
+}
+
+function buildAssetClassPositionGroups(
   positions: ValuedUnitPosition[],
-): ValuedUnitPosition[] {
-  return [...positions].sort((first, second) => {
-    const firstAccount = getAccountDescription(
-      first.owner_name,
-      first.provider_name,
-      first.account_name,
-    );
+  instruments: InstrumentRow[],
+  assetClasses: AssetClassRow[],
+  workspaceBaseCurrency: string,
+): AssetClassPositionGroup[] {
+  const instrumentMap = new Map(
+    instruments.map((instrument) => [
+      instrument.id,
+      instrument,
+    ]),
+  );
 
-    const secondAccount = getAccountDescription(
-      second.owner_name,
-      second.provider_name,
-      second.account_name,
-    );
+  const assetClassMap = new Map(
+    assetClasses.map((assetClass) => [
+      assetClass.id,
+      assetClass,
+    ]),
+  );
 
-    const accountComparison =
-      firstAccount.localeCompare(secondAccount);
+  const groupedPositions = new Map<
+    string,
+    ValuedUnitPosition[]
+  >();
 
-    if (accountComparison !== 0) {
-      return accountComparison;
+  for (const position of positions) {
+    if (!position.instrument_id) {
+      continue;
     }
 
-    const firstInstrument =
-      first.instrument_ticker ||
-      first.instrument_name ||
-      "";
+    const current =
+      groupedPositions.get(
+        position.instrument_id,
+      ) ?? [];
 
-    const secondInstrument =
-      second.instrument_ticker ||
-      second.instrument_name ||
-      "";
+    current.push(position);
 
-    return firstInstrument.localeCompare(
-      secondInstrument,
+    groupedPositions.set(
+      position.instrument_id,
+      current,
     );
-  });
+  }
+
+  const instrumentGroups = Array.from(
+    groupedPositions.entries(),
+  ).map(
+    ([instrumentId, grouped]) => {
+      const sortedPositions = [...grouped].sort(
+        (first, second) =>
+          getAccountDescription(
+            first.owner_name,
+            first.provider_name,
+            first.account_name,
+          ).localeCompare(
+            getAccountDescription(
+              second.owner_name,
+              second.provider_name,
+              second.account_name,
+            ),
+          ),
+      );
+
+      const instrument =
+        instrumentMap.get(instrumentId);
+
+      const assetClass =
+        instrument?.asset_class_id
+          ? assetClassMap.get(
+              instrument.asset_class_id,
+            )
+          : null;
+
+      const estimatedValues =
+        sortedPositions.map((position) =>
+          getEstimatedPositionBaseValue(
+            position,
+            workspaceBaseCurrency,
+          ),
+        );
+
+      const knownEstimatedValues =
+        estimatedValues.filter(
+          (value): value is number =>
+            value !== null,
+        );
+
+      const valuationDates =
+        sortedPositions
+          .map(
+            (position) =>
+              position.valuation_date,
+          )
+          .filter(
+            (value): value is string =>
+              Boolean(value),
+          )
+          .sort();
+
+      return {
+        instrumentId,
+        instrumentName:
+          instrument?.name ??
+          sortedPositions[0]
+            ?.instrument_name ??
+          "Unknown instrument",
+        instrumentTicker:
+          instrument?.ticker ??
+          sortedPositions[0]
+            ?.instrument_ticker ??
+          null,
+        assetClassId:
+          assetClass?.id ?? null,
+        assetClassName:
+          assetClass?.name ??
+          FALLBACK_ASSET_CLASS_NAME,
+        assetClassCode:
+          assetClass?.code ?? null,
+        assetClassColor:
+          assetClass?.color_hex ??
+          FALLBACK_ASSET_CLASS_COLOR,
+        assetClassSortOrder:
+          assetClass?.sort_order ?? 999,
+        positions: sortedPositions,
+        totalQuantity:
+          sortedPositions.reduce(
+            (sum, position) =>
+              sum +
+              Number(
+                position.quantity ?? 0,
+              ),
+            0,
+          ),
+        totalEstimatedBaseValue:
+          knownEstimatedValues.length > 0
+            ? knownEstimatedValues.reduce(
+                (sum, value) =>
+                  sum + value,
+                0,
+              )
+            : null,
+        valuedPositionCount:
+          knownEstimatedValues.length,
+        latestValuationDate:
+          valuationDates.length > 0
+            ? valuationDates[
+                valuationDates.length - 1
+              ]
+            : null,
+      } satisfies InstrumentPositionGroup;
+    },
+  );
+
+  const classGroups = new Map<
+    string,
+    AssetClassPositionGroup
+  >();
+
+  for (const instrument of instrumentGroups) {
+    const classKey =
+      instrument.assetClassId ??
+      `name:${instrument.assetClassName}`;
+
+    const existing = classGroups.get(classKey);
+
+    if (existing) {
+      existing.instruments.push(instrument);
+      continue;
+    }
+
+    classGroups.set(classKey, {
+      assetClassId:
+        instrument.assetClassId,
+      assetClassName:
+        instrument.assetClassName,
+      assetClassCode:
+        instrument.assetClassCode,
+      assetClassColor:
+        instrument.assetClassColor,
+      assetClassSortOrder:
+        instrument.assetClassSortOrder,
+      instruments: [instrument],
+    });
+  }
+
+  return Array.from(classGroups.values())
+    .map((assetClass) => ({
+      ...assetClass,
+      instruments: [
+        ...assetClass.instruments,
+      ].sort((first, second) => {
+        const firstValue =
+          first.totalEstimatedBaseValue ??
+          Number.NEGATIVE_INFINITY;
+
+        const secondValue =
+          second.totalEstimatedBaseValue ??
+          Number.NEGATIVE_INFINITY;
+
+        if (firstValue !== secondValue) {
+          return secondValue - firstValue;
+        }
+
+        return (
+          first.instrumentTicker ??
+          first.instrumentName
+        ).localeCompare(
+          second.instrumentTicker ??
+            second.instrumentName,
+        );
+      }),
+    }))
+    .sort((first, second) => {
+      if (
+        first.instruments.length !==
+        second.instruments.length
+      ) {
+        return (
+          second.instruments.length -
+          first.instruments.length
+        );
+      }
+
+      if (
+        first.assetClassSortOrder !==
+        second.assetClassSortOrder
+      ) {
+        return (
+          first.assetClassSortOrder -
+          second.assetClassSortOrder
+        );
+      }
+
+      return first.assetClassName.localeCompare(
+        second.assetClassName,
+      );
+    });
 }
 
 function sortCashBalances(
@@ -178,6 +478,8 @@ export default async function PortfolioStatePage() {
     unitPositionsResult,
     cashBalancesResult,
     reportedBalancesResult,
+    instrumentsResult,
+    assetClassesResult,
   ] = await Promise.all([
     supabase
       .from("workspaces")
@@ -214,6 +516,26 @@ export default async function PortfolioStatePage() {
         "workspace_id",
         membership.workspace_id,
       ),
+
+    supabase
+      .from("instruments")
+      .select(
+        "id, name, ticker, asset_class_id",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
+
+    supabase
+      .from("asset_classes")
+      .select(
+        "id, name, code, color_hex, sort_order",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      ),
   ]);
 
   if (workspaceResult.error) {
@@ -244,14 +566,27 @@ export default async function PortfolioStatePage() {
     );
   }
 
+  if (instrumentsResult.error) {
+    console.error(
+      "Portfolio instruments query failed:",
+      instrumentsResult.error,
+    );
+  }
+
+  if (assetClassesResult.error) {
+    console.error(
+      "Portfolio asset classes query failed:",
+      assetClassesResult.error,
+    );
+  }
+
   const workspace = workspaceResult.data;
 
   const workspaceBaseCurrency =
     workspace?.base_currency ?? "PLN";
 
-  const unitPositions = sortUnitPositions(
-    unitPositionsResult.data ?? [],
-  );
+  const unitPositions =
+    unitPositionsResult.data ?? [];
 
   const cashBalances = sortCashBalances(
     cashBalancesResult.data ?? [],
@@ -267,6 +602,30 @@ export default async function PortfolioStatePage() {
       (position) =>
         position.snapshot_id !== null,
     );
+
+  const assetClassPositionGroups =
+    buildAssetClassPositionGroups(
+      unitPositions,
+      instrumentsResult.data ?? [],
+      assetClassesResult.data ?? [],
+      workspaceBaseCurrency,
+    );
+
+  const instrumentPositionGroups =
+    assetClassPositionGroups.flatMap(
+      (assetClass) =>
+        assetClass.instruments,
+    );
+
+  const heldInstrumentCount =
+    instrumentPositionGroups.length;
+
+  const valuedInstrumentCount =
+    instrumentPositionGroups.filter(
+      (instrument) =>
+        instrument.totalEstimatedBaseValue !==
+        null,
+    ).length;
 
   const negativeUnitPositions =
     unitPositions.filter(
@@ -362,21 +721,29 @@ export default async function PortfolioStatePage() {
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
-              Unit positions
+              Held instruments
             </p>
 
             <p className="mt-2 text-3xl font-semibold">
-              {unitPositions.length}
+              {heldInstrumentCount}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              {unitPositions.length} account positions
             </p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">
-              Valued positions
+              Valued instruments
             </p>
 
             <p className="mt-2 text-3xl font-semibold">
-              {valuedUnitPositions.length}
+              {valuedInstrumentCount}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              {valuedUnitPositions.length} account valuations
             </p>
           </div>
 
@@ -566,239 +933,343 @@ export default async function PortfolioStatePage() {
           </section>
         )}
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.8fr)]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold">
-                  Current unit positions
+                  Current instruments
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Current ledger quantities combined
-                  with the latest available
-                  account-specific valuation.
+                  One card per instrument. Account
+                  positions are grouped underneath,
+                  with totals estimated from the
+                  latest available valuation data.
                 </p>
               </div>
 
               <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                {unitPositions.length}
+                {heldInstrumentCount}
               </span>
             </div>
 
-            {unitPositions.length > 0 ? (
-              <ul className="mt-6 divide-y divide-slate-200">
-                {unitPositions.map(
-                  (position) => {
-                    const quantity = Number(
-                      position.quantity ?? 0,
-                    );
-
-                    const hasValuation =
-                      position.snapshot_id !== null;
-
-                    const valuationMarketValue =
-                      position
-                        .valuation_market_value ===
-                      null
-                        ? null
-                        : Number(
-                            position
-                              .valuation_market_value,
-                          );
-
-                    const valuationBaseValue =
-                      position
-                        .valuation_market_value_base ===
-                      null
-                        ? null
-                        : Number(
-                            position
-                              .valuation_market_value_base,
-                          );
-
-                    const valuationUnitPrice =
-                      position
-                        .valuation_unit_price ===
-                      null
-                        ? null
-                        : Number(
-                            position
-                              .valuation_unit_price,
-                          );
-
-                    const valuationQuantity =
-                      position
-                        .valuation_quantity === null
-                        ? null
-                        : Number(
-                            position
-                              .valuation_quantity,
-                          );
-
-                    const valuationMatched =
-                      position.valuation_status ===
-                      "matched";
-
-                    return (
-                      <li
-                        key={`${position.account_id}-${position.instrument_id}`}
-                        className="py-5 first:pt-0 last:pb-0"
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <p className="font-medium">
-                              {position.instrument_ticker ||
-                                position.instrument_name}
-                            </p>
-
-                            <p className="mt-1 text-sm text-slate-600">
-                              {
-                                position.instrument_name
-                              }
-                            </p>
-
-                            <p className="mt-1 text-xs text-slate-500">
-                              {getAccountDescription(
-                                position.owner_name,
-                                position.provider_name,
-                                position.account_name,
-                              )}
-                            </p>
-                          </div>
-
+            {heldInstrumentCount > 0 ? (
+              <div className="mt-7 space-y-9">
+                {assetClassPositionGroups.map(
+                  (assetClass) => (
+                    <section
+                      key={
+                        assetClass.assetClassId ??
+                        assetClass.assetClassName
+                      }
+                    >
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                        <div className="flex items-center gap-3">
                           <span
-                            className={
-                              quantity >= 0
-                                ? "w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
-                                : "w-fit rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700"
-                            }
-                          >
-                            {quantity >= 0 ? "+" : ""}
-                            {formatQuantity(quantity)}
-                          </span>
-                        </div>
+                            className="h-3.5 w-3.5 rounded-full"
+                            style={{
+                              backgroundColor:
+                                assetClass.assetClassColor,
+                            }}
+                            aria-hidden="true"
+                          />
 
-                        {hasValuation &&
-                        valuationMarketValue !==
-                          null ? (
-                          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
-                                  Latest valuation
-                                </p>
+                          <div>
+                            <h3 className="font-semibold text-slate-900">
+                              {
+                                assetClass.assetClassName
+                              }
+                            </h3>
 
-                                <p className="mt-2 text-xl font-semibold text-slate-900">
-                                  {formatAmount(
-                                    valuationMarketValue,
-                                  )}{" "}
-                                  {
-                                    position.valuation_currency
-                                  }
-                                </p>
-
-                                {valuationBaseValue !==
-                                  null &&
-                                  position.valuation_currency !==
-                                    workspaceBaseCurrency && (
-                                    <p className="mt-1 text-sm text-slate-600">
-                                      {formatAmount(
-                                        valuationBaseValue,
-                                      )}{" "}
-                                      {
-                                        workspaceBaseCurrency
-                                      }
-                                    </p>
-                                  )}
-                              </div>
-
-                              <span
-                                className={
-                                  valuationMatched
-                                    ? "w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-                                    : "w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
-                                }
-                              >
-                                {valuationMatched
-                                  ? "Quantity matched"
-                                  : "Quantity mismatch"}
-                              </span>
-                            </div>
-
-                            <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                              <p>
-                                Valuation date:{" "}
-                                {position.valuation_date ??
-                                  "—"}
-                              </p>
-
-                              <p>
-                                Snapshot quantity:{" "}
-                                {valuationQuantity ===
-                                null
-                                  ? "—"
-                                  : formatQuantity(
-                                      valuationQuantity,
-                                    )}
-                              </p>
-
-                              <p>
-                                Unit price:{" "}
-                                {valuationUnitPrice ===
-                                null
-                                  ? "—"
-                                  : `${formatAmount(
-                                      valuationUnitPrice,
-                                    )} ${
-                                      position.valuation_currency ??
-                                      ""
-                                    }`}
-                              </p>
-
-                              <p>
-                                Source:{" "}
-                                {position.valuation_source ??
-                                  "—"}
-                              </p>
-                            </div>
-
-                            {position.valuation_notes && (
-                              <p className="mt-3 text-xs text-slate-500">
+                            {assetClass.assetClassCode && (
+                              <p className="mt-0.5 text-xs text-slate-500">
                                 {
-                                  position.valuation_notes
+                                  assetClass.assetClassCode
                                 }
                               </p>
                             )}
                           </div>
-                        ) : (
-                          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
-                            <p className="text-sm font-medium text-slate-700">
-                              No valuation yet
-                            </p>
+                        </div>
 
-                            <p className="mt-1 text-xs leading-5 text-slate-500">
-                              Add an account-specific
-                              position snapshot to
-                              store the current market
-                              value.
-                            </p>
-                          </div>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                          {
+                            assetClass.instruments
+                              .length
+                          }{" "}
+                          {assetClass.instruments
+                            .length === 1
+                            ? "instrument"
+                            : "instruments"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {assetClass.instruments.map(
+                          (instrument) => (
+                            <article
+                              key={
+                                instrument.instrumentId
+                              }
+                              className="rounded-2xl border border-slate-200 border-l-4 bg-white p-5 shadow-sm"
+                              style={{
+                                borderLeftColor:
+                                  instrument.assetClassColor,
+                              }}
+                            >
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-lg font-semibold text-slate-900">
+                                      {instrument.instrumentTicker ??
+                                        instrument.instrumentName}
+                                    </p>
+
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full"
+                                      style={{
+                                        backgroundColor:
+                                          instrument.assetClassColor,
+                                      }}
+                                      aria-hidden="true"
+                                    />
+                                  </div>
+
+                                  {instrument.instrumentTicker && (
+                                    <p className="mt-1 text-sm text-slate-600">
+                                      {
+                                        instrument.instrumentName
+                                      }
+                                    </p>
+                                  )}
+
+                                  <p className="mt-2 text-xs text-slate-500">
+                                    {
+                                      instrument.assetClassName
+                                    }{" "}
+                                    · {instrument.positions.length}{" "}
+                                    {instrument.positions.length ===
+                                    1
+                                      ? "account"
+                                      : "accounts"}
+                                    {instrument.latestValuationDate
+                                      ? ` · latest pricing ${instrument.latestValuationDate}`
+                                      : ""}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 lg:justify-end">
+                                  <div className="rounded-xl bg-blue-50 px-4 py-2 text-right">
+                                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-blue-600">
+                                      Total units
+                                    </p>
+
+                                    <p className="mt-1 text-lg font-semibold text-blue-800">
+                                      {formatQuantity(
+                                        instrument.totalQuantity,
+                                      )}
+                                    </p>
+                                  </div>
+
+                                  <div className="rounded-xl bg-slate-100 px-4 py-2 text-right">
+                                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                                      Estimated value
+                                    </p>
+
+                                    <p className="mt-1 text-lg font-semibold text-slate-900">
+                                      {instrument.totalEstimatedBaseValue ===
+                                      null
+                                        ? "—"
+                                        : `${formatAmount(
+                                            instrument.totalEstimatedBaseValue,
+                                          )} ${workspaceBaseCurrency}`}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {instrument.valuedPositionCount <
+                                instrument.positions.length && (
+                                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                  Aggregate value uses{" "}
+                                  {
+                                    instrument.valuedPositionCount
+                                  }{" "}
+                                  of{" "}
+                                  {instrument.positions.length}{" "}
+                                  account valuations.
+                                </p>
+                              )}
+
+                              <div className="mt-5 space-y-3 border-t border-slate-200 pt-4">
+                                {instrument.positions.map(
+                                  (position) => {
+                                    const quantity = Number(
+                                      position.quantity ?? 0,
+                                    );
+
+                                    const estimatedBaseValue =
+                                      getEstimatedPositionBaseValue(
+                                        position,
+                                        workspaceBaseCurrency,
+                                      );
+
+                                    const valuationQuantity =
+                                      position.valuation_quantity ===
+                                      null
+                                        ? null
+                                        : Number(
+                                            position.valuation_quantity,
+                                          );
+
+                                    const valuationUnitPrice =
+                                      position.valuation_unit_price ===
+                                      null
+                                        ? null
+                                        : Number(
+                                            position.valuation_unit_price,
+                                          );
+
+                                    const valuationMatched =
+                                      position.valuation_status ===
+                                      "matched";
+
+                                    const hasValuation =
+                                      position.snapshot_id !==
+                                      null;
+
+                                    return (
+                                      <div
+                                        key={`${position.account_id}-${position.instrument_id}`}
+                                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                                      >
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                          <div>
+                                            <p className="font-medium text-slate-900">
+                                              {getAccountDescription(
+                                                position.owner_name,
+                                                position.provider_name,
+                                                position.account_name,
+                                              )}
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-slate-500">
+                                              Activity:{" "}
+                                              {position.first_activity_date ??
+                                                "—"}{" "}
+                                              →{" "}
+                                              {position.last_activity_date ??
+                                                "—"}
+                                            </p>
+                                          </div>
+
+                                          <div className="flex flex-wrap gap-2 sm:justify-end">
+                                            <span
+                                              className={
+                                                quantity >= 0
+                                                  ? "w-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
+                                                  : "w-fit rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700"
+                                              }
+                                            >
+                                              {quantity >= 0
+                                                ? "+"
+                                                : ""}
+                                              {formatQuantity(
+                                                quantity,
+                                              )}
+                                            </span>
+
+                                            {estimatedBaseValue !==
+                                              null && (
+                                              <span className="w-fit rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+                                                {formatAmount(
+                                                  estimatedBaseValue,
+                                                )}{" "}
+                                                {
+                                                  workspaceBaseCurrency
+                                                }
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {hasValuation ? (
+                                          <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                                            <p>
+                                              Valuation date:{" "}
+                                              {position.valuation_date ??
+                                                "—"}
+                                            </p>
+
+                                            <p>
+                                              Snapshot quantity:{" "}
+                                              {valuationQuantity ===
+                                              null
+                                                ? "—"
+                                                : formatQuantity(
+                                                    valuationQuantity,
+                                                  )}
+                                            </p>
+
+                                            <p>
+                                              Unit price:{" "}
+                                              {valuationUnitPrice ===
+                                              null
+                                                ? "—"
+                                                : `${formatAmount(
+                                                    valuationUnitPrice,
+                                                  )} ${
+                                                    position.valuation_currency ??
+                                                    ""
+                                                  }`}
+                                            </p>
+
+                                            <p>
+                                              Source:{" "}
+                                              {position.valuation_source ??
+                                                "—"}
+                                            </p>
+
+                                            <div className="sm:col-span-2">
+                                              <span
+                                                className={
+                                                  valuationMatched
+                                                    ? "inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                                                    : "inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
+                                                }
+                                              >
+                                                {valuationMatched
+                                                  ? "Quantity matched"
+                                                  : "Quantity mismatch"}
+                                              </span>
+                                            </div>
+
+                                            {position.valuation_notes && (
+                                              <p className="sm:col-span-2 leading-5">
+                                                {
+                                                  position.valuation_notes
+                                                }
+                                              </p>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-500">
+                                            No valuation yet.
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            </article>
+                          ),
                         )}
-
-                        <p className="mt-3 text-xs text-slate-500">
-                          Activity:{" "}
-                          {position.first_activity_date ??
-                            "—"}{" "}
-                          →{" "}
-                          {position.last_activity_date ??
-                            "—"}
-                        </p>
-                      </li>
-                    );
-                  },
+                      </div>
+                    </section>
+                  ),
                 )}
-              </ul>
+              </div>
             ) : (
               <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
                 <p className="font-medium">

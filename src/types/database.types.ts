@@ -219,6 +219,134 @@ export type Database = {
           },
         ]
       }
+      daily_market_open_sync_items: {
+        Row: {
+          created_at: string
+          currency: string | null
+          error_message: string | null
+          id: string
+          instrument_id: string
+          metadata: Json
+          open_price: number | null
+          provider: string | null
+          provider_symbol: string | null
+          provider_timestamp: string | null
+          run_id: string
+          status: string
+          trading_date: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          instrument_id: string
+          metadata?: Json
+          open_price?: number | null
+          provider?: string | null
+          provider_symbol?: string | null
+          provider_timestamp?: string | null
+          run_id: string
+          status: string
+          trading_date?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          error_message?: string | null
+          id?: string
+          instrument_id?: string
+          metadata?: Json
+          open_price?: number | null
+          provider?: string | null
+          provider_symbol?: string | null
+          provider_timestamp?: string | null
+          run_id?: string
+          status?: string
+          trading_date?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_market_open_sync_items_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "daily_market_open_sync_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "daily_market_open_sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_market_open_sync_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          instrument_failure_count: number
+          instrument_skipped_count: number
+          instrument_success_count: number
+          market_region: string
+          notes: string | null
+          started_at: string
+          status: string
+          trading_date: string
+          trigger_source: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          instrument_failure_count?: number
+          instrument_skipped_count?: number
+          instrument_success_count?: number
+          market_region: string
+          notes?: string | null
+          started_at?: string
+          status: string
+          trading_date: string
+          trigger_source?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          instrument_failure_count?: number
+          instrument_skipped_count?: number
+          instrument_success_count?: number
+          market_region?: string
+          notes?: string | null
+          started_at?: string
+          status?: string
+          trading_date?: string
+          trigger_source?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_market_open_sync_runs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exchange_channels: {
         Row: {
           created_at: string
@@ -300,6 +428,69 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "exchange_rates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instrument_daily_open_prices: {
+        Row: {
+          created_at: string
+          currency: string
+          fetched_at: string
+          id: string
+          instrument_id: string
+          metadata: Json
+          open_price: number
+          provider: string
+          provider_symbol: string
+          provider_timestamp: string | null
+          trading_date: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency: string
+          fetched_at?: string
+          id?: string
+          instrument_id: string
+          metadata?: Json
+          open_price: number
+          provider: string
+          provider_symbol: string
+          provider_timestamp?: string | null
+          trading_date: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          fetched_at?: string
+          id?: string
+          instrument_id?: string
+          metadata?: Json
+          open_price?: number
+          provider?: string
+          provider_symbol?: string
+          provider_timestamp?: string | null
+          trading_date?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instrument_daily_open_prices_instrument_workspace_fk"
+            columns: ["workspace_id", "instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "instrument_daily_open_prices_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"

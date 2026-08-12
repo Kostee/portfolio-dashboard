@@ -1,0 +1,187 @@
+-- Daily market-open cron setup.
+--
+-- Reuses the Vault secrets already created for the weekly market-data workflow:
+--   market_sync_project_url
+--   market_sync_publishable_key
+--   market_sync_cron_secret
+--
+-- No provider secret is stored here.
+--
+-- Europe:
+--   initial attempt 09:35 Europe/Warsaw
+--   retry          10:35 Europe/Warsaw
+--   final retry    12:05 Europe/Warsaw
+--
+-- USA:
+--   initial attempt 09:40 America/New_York
+--   retry           10:20 America/New_York
+--
+-- The Edge Function keeps successful instruments and retries only unresolved
+-- instruments, so later attempts do not spend API quota on already-collected
+-- opening prices.
+--
+-- Paired UTC schedules make the setup DST-safe.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+do $$
+declare
+  name text;
+begin
+  foreach name in array array[
+    'daily-open-europe-0735-utc',
+    'daily-open-europe-0835-utc',
+    'daily-open-europe-0935-utc',
+    'daily-open-europe-1005-utc',
+    'daily-open-europe-1105-utc',
+    'daily-open-us-1340-utc',
+    'daily-open-us-1440-utc',
+    'daily-open-us-1420-utc',
+    'daily-open-us-1520-utc',
+
+    -- Previous schedule names, removed during upgrade.
+    'daily-open-europe-0955-utc',
+    'daily-open-europe-1055-utc',
+    'daily-open-us-1405-utc',
+    'daily-open-us-1505-utc'
+  ]
+  loop
+    if exists (
+      select 1
+      from cron.job
+      where jobname = name
+    ) then
+      perform cron.unschedule(name);
+    end if;
+  end loop;
+end
+$$;
+
+create or replace function public.invoke_daily_market_open_sync(
+  p_region text
+)
+returns bigint
+language sql
+security definer
+set search_path = ''
+as $$
+  select net.http_post(
+    url :=
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_project_url'
+        order by created_at desc
+        limit 1
+      )
+      || '/functions/v1/sync-daily-market-opens',
+
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+
+      'apikey',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_publishable_key'
+        order by created_at desc
+        limit 1
+      ),
+
+      'x-market-sync-secret',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_cron_secret'
+        order by created_at desc
+        limit 1
+      )
+    ),
+
+    body := jsonb_build_object(
+      'region', p_region,
+      'trigger', 'cron'
+    ),
+
+    timeout_milliseconds := 300000
+  );
+$$;
+
+revoke all
+  on function public.invoke_daily_market_open_sync(text)
+  from public, anon, authenticated;
+
+grant execute
+  on function public.invoke_daily_market_open_sync(text)
+  to service_role;
+
+-- Europe: 09:35 / 10:35 / 12:05 Europe/Warsaw.
+-- The UTC jobs overlap by design because Warsaw changes between UTC+1 and UTC+2.
+-- Edge Function local-time gating decides which invocations are valid.
+
+select cron.schedule(
+  'daily-open-europe-0735-utc',
+  '35 7 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('europe');$$
+);
+
+select cron.schedule(
+  'daily-open-europe-0835-utc',
+  '35 8 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('europe');$$
+);
+
+select cron.schedule(
+  'daily-open-europe-0935-utc',
+  '35 9 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('europe');$$
+);
+
+select cron.schedule(
+  'daily-open-europe-1005-utc',
+  '5 10 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('europe');$$
+);
+
+select cron.schedule(
+  'daily-open-europe-1105-utc',
+  '5 11 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('europe');$$
+);
+
+-- USA: 09:40 / 10:20 America/New_York.
+-- New York changes between UTC-4 and UTC-5.
+
+select cron.schedule(
+  'daily-open-us-1340-utc',
+  '40 13 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('us');$$
+);
+
+select cron.schedule(
+  'daily-open-us-1440-utc',
+  '40 14 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('us');$$
+);
+
+select cron.schedule(
+  'daily-open-us-1420-utc',
+  '20 14 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('us');$$
+);
+
+select cron.schedule(
+  'daily-open-us-1520-utc',
+  '20 15 * * 1-5',
+  $$select public.invoke_daily_market_open_sync('us');$$
+);
+
+select
+  jobid,
+  jobname,
+  schedule,
+  active
+from cron.job
+where jobname like 'daily-open-%'
+order by jobname;

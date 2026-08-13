@@ -154,7 +154,7 @@ export default async function OperationsPage({
     supabase
       .from("portfolio_operations")
       .select(
-        "id, operation_date, executed_at, operation_type, status, source, description, created_at",
+        "id, operation_date, executed_at, operation_type, status, source, description, funding_route_id, created_at",
       )
       .eq(
         "workspace_id",
@@ -488,6 +488,16 @@ export default async function OperationsPage({
                       workspaceTimeZone,
                     );
 
+                  const canEditOperation =
+                    canEdit &&
+                    operation.source === "manual" &&
+                    operation.status === "posted" &&
+                    (
+                      operation.operation_type === "buy" ||
+                      operation.operation_type === "sell"
+                    ) &&
+                    !operation.funding_route_id;
+
                   return (
                     <li
                       key={operation.id}
@@ -525,6 +535,15 @@ export default async function OperationsPage({
                           </span>
                         </div>
                       </div>
+
+                      {canEditOperation && (
+                        <Link
+                          href={`/portfolio/operations/${operation.id}/edit`}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          Edit
+                        </Link>
+                      )}
 
                       {entries.length > 0 && (
                         <ul className="mt-4 space-y-2">

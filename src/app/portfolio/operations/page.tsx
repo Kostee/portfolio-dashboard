@@ -505,14 +505,25 @@ export default async function OperationsPage({
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="font-medium">
-                            {
-                              OPERATION_TYPE_LABELS[
-                                operation
-                                  .operation_type
-                              ]
-                            }
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">
+                              {
+                                OPERATION_TYPE_LABELS[
+                                  operation
+                                    .operation_type
+                                ]
+                              }
+                            </p>
+
+                            {canEditOperation && (
+                              <Link
+                                href={`/portfolio/operations/${operation.id}/edit`}
+                                className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                              >
+                                Edit
+                              </Link>
+                            )}
+                          </div>
 
                           <p className="mt-1 text-xs text-slate-500">
                             {operation.operation_date}
@@ -535,15 +546,6 @@ export default async function OperationsPage({
                           </span>
                         </div>
                       </div>
-
-                      {canEditOperation && (
-                        <Link
-                          href={`/portfolio/operations/${operation.id}/edit`}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                        >
-                          Edit
-                        </Link>
-                      )}
 
                       {entries.length > 0 && (
                         <ul className="mt-4 space-y-2">

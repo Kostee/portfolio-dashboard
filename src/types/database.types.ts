@@ -2773,6 +2773,10 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      invoke_daily_market_open_sync: {
+        Args: { p_region: string }
+        Returns: number
+      }
       replace_weekly_operation_report: {
         Args: {
           p_bought_base: number
@@ -2782,6 +2786,24 @@ export type Database = {
           p_sold_base: number
           p_to_date: string
           p_workspace_id: string
+        }
+        Returns: string
+      }
+      update_manual_trade_operation: {
+        Args: {
+          p_account_id: string
+          p_actual_cash_amount: number
+          p_base_value?: number
+          p_cash_currency: string
+          p_description?: string
+          p_fee_amount?: number
+          p_instrument_id: string
+          p_operation_date: string
+          p_operation_id: string
+          p_operation_time?: string
+          p_operation_type: Database["public"]["Enums"]["portfolio_operation_type"]
+          p_quantity: number
+          p_tax_amount?: number
         }
         Returns: string
       }

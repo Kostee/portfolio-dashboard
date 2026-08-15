@@ -13,12 +13,36 @@ import {
   OPERATION_TYPE_LABELS,
 } from "./operation-options";
 
+type SearchParamValue =
+  | string
+  | string[]
+  | undefined;
+
 type OperationsPageProps = {
   searchParams: Promise<{
-    error?: string;
-    success?: string;
+    error?: SearchParamValue;
+    success?: SearchParamValue;
+    range?: SearchParamValue;
+    from?: SearchParamValue;
+    to?: SearchParamValue;
+    types?: SearchParamValue;
+    accounts?: SearchParamValue;
+    page?: SearchParamValue;
   }>;
 };
+
+type PortfolioOperationSummary = Pick<
+  Database["public"]["Tables"]["portfolio_operations"]["Row"],
+  | "id"
+  | "operation_date"
+  | "executed_at"
+  | "operation_type"
+  | "status"
+  | "source"
+  | "description"
+  | "funding_route_id"
+  | "created_at"
+>;
 
 type OperationEntrySummary = Pick<
   Database["public"]["Tables"]["portfolio_operation_entries"]["Row"],
@@ -32,7 +56,56 @@ type OperationEntrySummary = Pick<
   | "value_delta"
   | "currency"
   | "component"
+  | "base_cash_delta"
+  | "base_value_delta"
 >;
+
+type DateRangePreset =
+  | "all"
+  | "24h"
+  | "7d"
+  | "30d"
+  | "ytd"
+  | "12m"
+  | "custom";
+
+const FILTER_PAGE_SIZE = 100;
+const DATABASE_BATCH_SIZE = 1000;
+
+const DATE_RANGE_OPTIONS: Array<{
+  value: DateRangePreset;
+  label: string;
+}> = [
+  {
+    value: "all",
+    label: "All time",
+  },
+  {
+    value: "24h",
+    label: "Last 24 hours",
+  },
+  {
+    value: "7d",
+    label: "Last 7 days",
+  },
+  {
+    value: "30d",
+    label: "Last 30 days",
+  },
+  {
+    value: "ytd",
+    label: "Year to date",
+  },
+  {
+    value: "12m",
+    label: "Last 12 months",
+  },
+  {
+    value: "custom",
+    label: "Custom range",
+  },
+];
+
 
 function formatAmount(value: number): string {
   return new Intl.NumberFormat("en-GB", {
@@ -64,6 +137,406 @@ function formatOperationTime(
   }).format(new Date(value));
 }
 
+function firstSearchParam(
+  value: SearchParamValue,
+): string | undefined {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
+
+function searchParamValues(
+  value: SearchParamValue,
+): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return Array.isArray(value)
+    ? value
+    : [value];
+}
+
+function isIsoDate(
+  value: string | undefined,
+): value is string {
+  if (!value) {
+    return false;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function shiftIsoDate(
+  value: string,
+  days: number,
+): string {
+  const date = new Date(
+    `${value}T00:00:00Z`,
+  );
+
+  date.setUTCDate(
+    date.getUTCDate() +
+      days,
+  );
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
+function shiftIsoYear(
+  value: string,
+  years: number,
+): string {
+  const [
+    year,
+    month,
+    day,
+  ] = value
+    .split("-")
+    .map(Number);
+
+  const targetYear =
+    year +
+    years;
+
+  const lastDayOfTargetMonth =
+    new Date(
+      Date.UTC(
+        targetYear,
+        month,
+        0,
+      ),
+    ).getUTCDate();
+
+  const targetDate =
+    new Date(
+      Date.UTC(
+        targetYear,
+        month - 1,
+        Math.min(
+          day,
+          lastDayOfTargetMonth,
+        ),
+      ),
+    );
+
+  return targetDate
+    .toISOString()
+    .slice(0, 10);
+}
+
+function getDateForInstantInTimeZone(
+  value: Date,
+  timeZone: string,
+): string {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-GB",
+      {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      },
+    ).formatToParts(value);
+
+  const partMap =
+    new Map(
+      parts.map(
+        (part) => [
+          part.type,
+          part.value,
+        ],
+      ),
+    );
+
+  return [
+    partMap.get("year"),
+    partMap.get("month"),
+    partMap.get("day"),
+  ].join("-");
+}
+
+function matchesDateRange(
+  operation: PortfolioOperationSummary,
+  preset: DateRangePreset,
+  today: string,
+  workspaceTimeZone: string,
+  customFrom: string | undefined,
+  customTo: string | undefined,
+): boolean {
+  if (preset === "all") {
+    return true;
+  }
+
+  if (preset === "24h") {
+    const cutoff =
+      new Date(
+        Date.now() -
+          24 *
+            60 *
+            60 *
+            1000,
+      );
+
+    if (operation.executed_at) {
+      const executedAt =
+        new Date(
+          operation.executed_at,
+        );
+
+      return (
+        executedAt >= cutoff &&
+        executedAt <=
+          new Date()
+      );
+    }
+
+    const cutoffDate =
+      getDateForInstantInTimeZone(
+        cutoff,
+        workspaceTimeZone,
+      );
+
+    return (
+      operation.operation_date >=
+        cutoffDate &&
+      operation.operation_date <=
+        today
+    );
+  }
+
+  if (preset === "custom") {
+    if (
+      customFrom &&
+      operation.operation_date <
+        customFrom
+    ) {
+      return false;
+    }
+
+    if (
+      customTo &&
+      operation.operation_date >
+        customTo
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  let startDate =
+    today;
+
+  if (preset === "7d") {
+    startDate =
+      shiftIsoDate(
+        today,
+        -6,
+      );
+  } else if (
+    preset === "30d"
+  ) {
+    startDate =
+      shiftIsoDate(
+        today,
+        -29,
+      );
+  } else if (
+    preset === "ytd"
+  ) {
+    startDate =
+      `${today.slice(0, 4)}-01-01`;
+  } else if (
+    preset === "12m"
+  ) {
+    startDate =
+      shiftIsoYear(
+        today,
+        -1,
+      );
+  }
+
+  return (
+    operation.operation_date >=
+      startDate &&
+    operation.operation_date <=
+      today
+  );
+}
+
+async function loadAllOperations(
+  supabase: Awaited<
+    ReturnType<typeof createClient>
+  >,
+  workspaceId: string,
+) {
+  const rows:
+    PortfolioOperationSummary[] =
+    [];
+
+  let from = 0;
+
+  while (true) {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        "portfolio_operations",
+      )
+      .select(
+        "id, operation_date, executed_at, operation_type, status, source, description, funding_route_id, created_at",
+      )
+      .eq(
+        "workspace_id",
+        workspaceId,
+      )
+      .order(
+        "operation_date",
+        {
+          ascending: false,
+        },
+      )
+      .order(
+        "executed_at",
+        {
+          ascending: false,
+          nullsFirst: false,
+        },
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        },
+      )
+      .order(
+        "id",
+        {
+          ascending: false,
+        },
+      )
+      .range(
+        from,
+        from +
+          DATABASE_BATCH_SIZE -
+          1,
+      );
+
+    if (error) {
+      return {
+        data: rows,
+        error,
+      };
+    }
+
+    const batch =
+      (data ??
+        []) as PortfolioOperationSummary[];
+
+    rows.push(
+      ...batch,
+    );
+
+    if (
+      batch.length <
+      DATABASE_BATCH_SIZE
+    ) {
+      break;
+    }
+
+    from +=
+      DATABASE_BATCH_SIZE;
+  }
+
+  return {
+    data: rows,
+    error: null,
+  };
+}
+
+async function loadAllOperationEntries(
+  supabase: Awaited<
+    ReturnType<typeof createClient>
+  >,
+  workspaceId: string,
+) {
+  const rows:
+    OperationEntrySummary[] =
+    [];
+
+  let from = 0;
+
+  while (true) {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        "portfolio_operation_entries",
+      )
+      .select(
+        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, value_delta, currency, component, base_cash_delta, base_value_delta",
+      )
+      .eq(
+        "workspace_id",
+        workspaceId,
+      )
+      .order(
+        "operation_id",
+        {
+          ascending: true,
+        },
+      )
+      .order(
+        "sequence_no",
+        {
+          ascending: true,
+        },
+      )
+      .range(
+        from,
+        from +
+          DATABASE_BATCH_SIZE -
+          1,
+      );
+
+    if (error) {
+      return {
+        data: rows,
+        error,
+      };
+    }
+
+    const batch =
+      (data ??
+        []) as OperationEntrySummary[];
+
+    rows.push(
+      ...batch,
+    );
+
+    if (
+      batch.length <
+      DATABASE_BATCH_SIZE
+    ) {
+      break;
+    }
+
+    from +=
+      DATABASE_BATCH_SIZE;
+  }
+
+  return {
+    data: rows,
+    error: null,
+  };
+}
+
 export default async function OperationsPage({
   searchParams,
 }: OperationsPageProps) {
@@ -76,8 +549,64 @@ export default async function OperationsPage({
     redirect("/portfolio/login");
   }
 
-  const { error: errorCode, success } =
+  const resolvedSearchParams =
     await searchParams;
+
+  const errorCode =
+    firstSearchParam(
+      resolvedSearchParams.error,
+    );
+
+  const success =
+    firstSearchParam(
+      resolvedSearchParams.success,
+    );
+
+  const requestedRange =
+    firstSearchParam(
+      resolvedSearchParams.range,
+    );
+
+  const dateRange =
+    DATE_RANGE_OPTIONS.some(
+      (option) =>
+        option.value ===
+        requestedRange,
+    )
+      ? (requestedRange as DateRangePreset)
+      : "all";
+
+  const requestedFrom =
+    firstSearchParam(
+      resolvedSearchParams.from,
+    );
+
+  const requestedTo =
+    firstSearchParam(
+      resolvedSearchParams.to,
+    );
+
+  const customFrom =
+    isIsoDate(
+      requestedFrom,
+    )
+      ? requestedFrom
+      : undefined;
+
+  const customTo =
+    isIsoDate(
+      requestedTo,
+    )
+      ? requestedTo
+      : undefined;
+
+  const requestedPage =
+    Number(
+      firstSearchParam(
+        resolvedSearchParams.page,
+      ) ??
+        "1",
+    );
 
   const { data: membership, error: membershipError } =
     await supabase
@@ -105,11 +634,17 @@ export default async function OperationsPage({
     accountsResult,
     instrumentsResult,
     operationsResult,
+    operationEntriesResult,
   ] = await Promise.all([
     supabase
       .from("workspaces")
-      .select("name, timezone")
-      .eq("id", membership.workspace_id)
+      .select(
+        "name, timezone, base_currency",
+      )
+      .eq(
+        "id",
+        membership.workspace_id,
+      )
       .single(),
 
     supabase
@@ -151,39 +686,41 @@ export default async function OperationsPage({
         membership.workspace_id,
       ),
 
-    supabase
-      .from("portfolio_operations")
-      .select(
-        "id, operation_date, executed_at, operation_type, status, source, description, funding_route_id, created_at",
-      )
-      .eq(
-        "workspace_id",
-        membership.workspace_id,
-      )
-      .order("operation_date", {
-        ascending: false,
-      })
-      .order("executed_at", {
-        ascending: false,
-        nullsFirst: false,
-      })
-      .order("created_at", {
-        ascending: false,
-      })
-      .order("id", {
-        ascending: false,
-      })
-      .limit(50)
+    loadAllOperations(
+      supabase,
+      membership.workspace_id,
+    ),
+
+    loadAllOperationEntries(
+      supabase,
+      membership.workspace_id,
+    ),
   ]);
 
-  const workspace = workspaceResult.data;
-  const owners = ownersResult.data ?? [];
-  const providers = providersResult.data ?? [];
-  const accounts = accountsResult.data ?? [];
+  const workspace =
+    workspaceResult.data;
+
+  const owners =
+    ownersResult.data ??
+    [];
+
+  const providers =
+    providersResult.data ??
+    [];
+
+  const accounts =
+    accountsResult.data ??
+    [];
+
   const instruments =
-    instrumentsResult.data ?? [];
-  const operations =
-    operationsResult.data ?? [];
+    instrumentsResult.data ??
+    [];
+
+  const allOperations =
+    operationsResult.data;
+
+  const operationEntries =
+    operationEntriesResult.data;
 
   if (workspaceResult.error) {
     console.error(
@@ -227,35 +764,13 @@ export default async function OperationsPage({
     );
   }
 
-  const operationIds = operations.map(
-    (operation) => operation.id,
-  );
-
-  let operationEntries:
-    OperationEntrySummary[] = [];
-
-  if (operationIds.length > 0) {
-    const { data, error } = await supabase
-      .from("portfolio_operation_entries")
-      .select(
-        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, value_delta, currency, component",
-      )
-      .in("operation_id", operationIds)
-      .order("operation_id", {
-        ascending: true,
-      })
-      .order("sequence_no", {
-        ascending: true,
-      });
-
-    if (error) {
-      console.error(
-        "Operation entries query failed:",
-        error,
-      );
-    } else {
-      operationEntries = data ?? [];
-    }
+  if (
+    operationEntriesResult.error
+  ) {
+    console.error(
+      "Operation entries query failed:",
+      operationEntriesResult.error,
+    );
   }
 
   const ownerMap = new Map(
@@ -286,42 +801,82 @@ export default async function OperationsPage({
     ]),
   );
 
-  const activeAccounts = accounts
-    .filter((account) => account.is_active)
-    .sort((first, second) => {
-      const firstOwner = ownerMap.get(
+  const sortedAccounts = [
+    ...accounts,
+  ].sort((first, second) => {
+    const firstOwner =
+      ownerMap.get(
         first.owner_id,
       );
 
-      const secondOwner = ownerMap.get(
+    const secondOwner =
+      ownerMap.get(
         second.owner_id,
       );
 
-      const ownerOrderDifference =
-        (firstOwner?.sort_order ?? 999) -
-        (secondOwner?.sort_order ?? 999);
-
-      if (ownerOrderDifference !== 0) {
-        return ownerOrderDifference;
-      }
-
-      return first.name.localeCompare(
-        second.name,
+    const ownerOrderDifference =
+      (
+        firstOwner?.sort_order ??
+        999
+      ) -
+      (
+        secondOwner?.sort_order ??
+        999
       );
-    });
 
-  const entriesByOperation = new Map<
-    string,
-    OperationEntrySummary[]
-  >();
+    if (
+      ownerOrderDifference !==
+      0
+    ) {
+      return ownerOrderDifference;
+    }
 
-  for (const entry of operationEntries) {
+    const ownerNameDifference =
+      (
+        firstOwner?.display_name ??
+        ""
+      ).localeCompare(
+        secondOwner?.display_name ??
+          "",
+      );
+
+    if (
+      ownerNameDifference !==
+      0
+    ) {
+      return ownerNameDifference;
+    }
+
+    return first.name.localeCompare(
+      second.name,
+    );
+  });
+
+  const activeAccounts =
+    sortedAccounts.filter(
+      (account) =>
+        account.is_active,
+    );
+
+  const entriesByOperation =
+    new Map<
+      string,
+      OperationEntrySummary[]
+    >();
+
+  for (
+    const entry of
+    operationEntries
+  ) {
     const entries =
       entriesByOperation.get(
         entry.operation_id,
-      ) ?? [];
+      ) ??
+      [];
 
-    entries.push(entry);
+    entries.push(
+      entry,
+    );
 
     entriesByOperation.set(
       entry.operation_id,
@@ -330,15 +885,430 @@ export default async function OperationsPage({
   }
 
   const canEdit =
-    membership.role === "admin" ||
-    membership.role === "editor";
+    membership.role ===
+      "admin" ||
+    membership.role ===
+      "editor";
 
   const workspaceTimeZone =
-    workspace?.timezone ?? "Europe/Warsaw";
+    workspace?.timezone ??
+    "Europe/Warsaw";
 
-  const today = getDateInTimeZone(
-    workspaceTimeZone,
-  );
+  const workspaceBaseCurrency =
+    workspace?.base_currency ??
+    "PLN";
+
+  const today =
+    getDateInTimeZone(
+      workspaceTimeZone,
+    );
+
+  const operationTypeOptions =
+    Object.entries(
+      OPERATION_TYPE_LABELS,
+    ) as Array<
+      [
+        PortfolioOperationSummary["operation_type"],
+        string,
+      ]
+    >;
+
+  const validOperationTypes =
+    new Set(
+      operationTypeOptions.map(
+        ([value]) =>
+          value,
+      ),
+    );
+
+  const selectedOperationTypes =
+    searchParamValues(
+      resolvedSearchParams.types,
+    ).filter(
+      (
+        value,
+      ): value is PortfolioOperationSummary["operation_type"] =>
+        validOperationTypes.has(
+          value as PortfolioOperationSummary["operation_type"],
+        ),
+    );
+
+  const validAccountIds =
+    new Set(
+      accounts.map(
+        (account) =>
+          account.id,
+      ),
+    );
+
+  const selectedAccountIds =
+    searchParamValues(
+      resolvedSearchParams.accounts,
+    ).filter(
+      (accountId) =>
+        validAccountIds.has(
+          accountId,
+        ),
+    );
+
+  const selectedOperationTypeSet =
+    new Set(
+      selectedOperationTypes,
+    );
+
+  const selectedAccountIdSet =
+    new Set(
+      selectedAccountIds,
+    );
+
+  const filteredOperations =
+    allOperations.filter(
+      (operation) => {
+        if (
+          selectedOperationTypeSet.size >
+            0 &&
+          !selectedOperationTypeSet.has(
+            operation.operation_type,
+          )
+        ) {
+          return false;
+        }
+
+        if (
+          !matchesDateRange(
+            operation,
+            dateRange,
+            today,
+            workspaceTimeZone,
+            customFrom,
+            customTo,
+          )
+        ) {
+          return false;
+        }
+
+        if (
+          selectedAccountIdSet.size >
+          0
+        ) {
+          const entries =
+            entriesByOperation.get(
+              operation.id,
+            ) ??
+            [];
+
+          const touchesSelectedAccount =
+            entries.some(
+              (entry) =>
+                selectedAccountIdSet.has(
+                  entry.account_id,
+                ),
+            );
+
+          if (
+            !touchesSelectedAccount
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      },
+    );
+
+  const totalFilteredOperations =
+    filteredOperations.length;
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        totalFilteredOperations /
+          FILTER_PAGE_SIZE,
+      ),
+    );
+
+  const currentPage =
+    Number.isFinite(
+      requestedPage,
+    ) &&
+    requestedPage >= 1
+      ? Math.min(
+          Math.floor(
+            requestedPage,
+          ),
+          totalPages,
+        )
+      : 1;
+
+  const pageStart =
+    (
+      currentPage -
+      1
+    ) *
+    FILTER_PAGE_SIZE;
+
+  const operations =
+    filteredOperations.slice(
+      pageStart,
+      pageStart +
+        FILTER_PAGE_SIZE,
+    );
+
+  const visibleFrom =
+    totalFilteredOperations ===
+    0
+      ? 0
+      : pageStart + 1;
+
+  const visibleTo =
+    Math.min(
+      pageStart +
+        FILTER_PAGE_SIZE,
+      totalFilteredOperations,
+    );
+
+  let purchaseTotal = 0;
+  let saleTotal = 0;
+  let depositTotal = 0;
+  let dividendTotal = 0;
+  let netCashTotal = 0;
+  let incompleteSummaryOperations =
+    0;
+  let postedSummaryOperations =
+    0;
+
+  for (
+    const operation of
+    filteredOperations
+  ) {
+    if (
+      operation.status !==
+      "posted"
+    ) {
+      continue;
+    }
+
+    const allEntries =
+      entriesByOperation.get(
+        operation.id,
+      ) ??
+      [];
+
+    const summaryEntries =
+      selectedAccountIdSet.size >
+      0
+        ? allEntries.filter(
+            (entry) =>
+              selectedAccountIdSet.has(
+                entry.account_id,
+              ),
+          )
+        : allEntries;
+
+    let operationBaseCash =
+      0;
+
+    let hasCashMovement =
+      false;
+
+    let canSummarizeOperation =
+      true;
+
+    for (
+      const entry of
+      summaryEntries
+    ) {
+      const cashDelta =
+        Number(
+          entry.cash_delta,
+        );
+
+      if (
+        cashDelta === 0
+      ) {
+        continue;
+      }
+
+      hasCashMovement =
+        true;
+
+      if (
+        entry.base_cash_delta !==
+        null
+      ) {
+        operationBaseCash +=
+          Number(
+            entry.base_cash_delta,
+          );
+
+        continue;
+      }
+
+      if (
+        entry.currency ===
+        workspaceBaseCurrency
+      ) {
+        operationBaseCash +=
+          cashDelta;
+
+        continue;
+      }
+
+      canSummarizeOperation =
+        false;
+    }
+
+    if (!hasCashMovement) {
+      continue;
+    }
+
+    if (
+      !canSummarizeOperation
+    ) {
+      incompleteSummaryOperations +=
+        1;
+
+      continue;
+    }
+
+    postedSummaryOperations +=
+      1;
+
+    netCashTotal +=
+      operationBaseCash;
+
+    if (
+      operation.operation_type ===
+      "buy"
+    ) {
+      purchaseTotal +=
+        Math.abs(
+          operationBaseCash,
+        );
+    } else if (
+      operation.operation_type ===
+      "sell"
+    ) {
+      saleTotal +=
+        Math.abs(
+          operationBaseCash,
+        );
+    } else if (
+      operation.operation_type ===
+      "deposit"
+    ) {
+      depositTotal +=
+        Math.max(
+          operationBaseCash,
+          0,
+        );
+    } else if (
+      operation.operation_type ===
+      "dividend"
+    ) {
+      dividendTotal +=
+        Math.max(
+          operationBaseCash,
+          0,
+        );
+    }
+  }
+
+  const accountsByOwner =
+    owners.map(
+      (owner) => ({
+        owner,
+        accounts:
+          sortedAccounts.filter(
+            (account) =>
+              account.owner_id ===
+              owner.id,
+          ),
+      }),
+    );
+
+  function buildOperationsHref(
+    options?: {
+      page?: number;
+      accounts?: string[];
+    },
+  ): string {
+    const params =
+      new URLSearchParams();
+
+    if (
+      dateRange !== "all"
+    ) {
+      params.set(
+        "range",
+        dateRange,
+      );
+    }
+
+    if (
+      dateRange ===
+      "custom"
+    ) {
+      if (customFrom) {
+        params.set(
+          "from",
+          customFrom,
+        );
+      }
+
+      if (customTo) {
+        params.set(
+          "to",
+          customTo,
+        );
+      }
+    }
+
+    for (
+      const operationType of
+      selectedOperationTypes
+    ) {
+      params.append(
+        "types",
+        operationType,
+      );
+    }
+
+    const accountIds =
+      options?.accounts ??
+      selectedAccountIds;
+
+    for (
+      const accountId of
+      accountIds
+    ) {
+      params.append(
+        "accounts",
+        accountId,
+      );
+    }
+
+    if (
+      options?.page &&
+      options.page >
+        1
+    ) {
+      params.set(
+        "page",
+        String(
+          options.page,
+        ),
+      );
+    }
+
+    const query =
+      params.toString();
+
+    return query
+      ? `/portfolio/operations?${query}`
+      : "/portfolio/operations";
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-900 sm:px-8">
@@ -456,26 +1426,405 @@ export default async function OperationsPage({
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-xl font-semibold">
-                  Recent operations
+                  Operations history
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  The list shows the fifty most
-                  recent posted, draft or voided
-                  portfolio events.
+                  Filter the full ledger by date, operation type and
+                  account. Summary values use posted operations only.
                 </p>
               </div>
 
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                {operations.length}
+              <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                {totalFilteredOperations}
               </span>
             </div>
 
+            <form
+              method="get"
+              className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4"
+            >
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                <div>
+                  <label
+                    htmlFor="operationsRange"
+                    className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+                  >
+                    Date range
+                  </label>
+
+                  <select
+                    id="operationsRange"
+                    name="range"
+                    defaultValue={dateRange}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  >
+                    {DATE_RANGE_OPTIONS.map(
+                      (option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                        >
+                          {option.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        htmlFor="operationsFrom"
+                        className="block text-xs text-slate-500"
+                      >
+                        From
+                      </label>
+
+                      <input
+                        id="operationsFrom"
+                        name="from"
+                        type="date"
+                        defaultValue={customFrom ?? ""}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="operationsTo"
+                        className="block text-xs text-slate-500"
+                      >
+                        To
+                      </label>
+
+                      <input
+                        id="operationsTo"
+                        name="to"
+                        type="date"
+                        defaultValue={customTo ?? ""}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-[11px] leading-4 text-slate-500">
+                    From / To are used when Custom range is selected.
+                    Last 24 hours uses exact execution time where available.
+                  </p>
+                </div>
+
+                <details
+                  className="rounded-lg border border-slate-300 bg-white"
+                  open={selectedOperationTypes.length > 0}
+                >
+                  <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-slate-700">
+                    Operation types
+                    <span className="ml-2 text-xs font-normal text-slate-500">
+                      {selectedOperationTypes.length === 0
+                        ? "All"
+                        : `${selectedOperationTypes.length} selected`}
+                    </span>
+                  </summary>
+
+                  <div className="max-h-72 space-y-2 overflow-y-auto border-t border-slate-200 p-3">
+                    {operationTypeOptions.map(
+                      ([value, label]) => (
+                        <label
+                          key={value}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            name="types"
+                            value={value}
+                            defaultChecked={
+                              selectedOperationTypeSet.has(
+                                value,
+                              )
+                            }
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+
+                          <span>
+                            {label}
+                          </span>
+                        </label>
+                      ),
+                    )}
+
+                    <p className="pt-1 text-[11px] leading-4 text-slate-500">
+                      Leave every option unchecked to include all operation
+                      types.
+                    </p>
+                  </div>
+                </details>
+
+                <details
+                  className="rounded-lg border border-slate-300 bg-white"
+                  open={selectedAccountIds.length > 0}
+                >
+                  <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-slate-700">
+                    Accounts
+                    <span className="ml-2 text-xs font-normal text-slate-500">
+                      {selectedAccountIds.length === 0
+                        ? "All"
+                        : `${selectedAccountIds.length} selected`}
+                    </span>
+                  </summary>
+
+                  <div className="max-h-80 overflow-y-auto border-t border-slate-200 p-3">
+                    {accountsByOwner.map(
+                      ({ owner, accounts: ownerAccounts }) =>
+                        ownerAccounts.length > 0 ? (
+                          <div
+                            key={owner.id}
+                            className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0 [&+&]:pt-3"
+                          >
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                {owner.display_name}
+                              </p>
+
+                              <Link
+                                href={buildOperationsHref({
+                                  accounts: ownerAccounts.map(
+                                    (account) => account.id,
+                                  ),
+                                })}
+                                className="text-[11px] font-medium text-blue-700 hover:text-blue-900"
+                              >
+                                Only {owner.display_name}
+                              </Link>
+                            </div>
+
+                            <div className="space-y-1">
+                              {ownerAccounts.map(
+                                (account) => {
+                                  const provider =
+                                    providerMap.get(
+                                      account.provider_id,
+                                    );
+
+                                  return (
+                                    <label
+                                      key={account.id}
+                                      className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        name="accounts"
+                                        value={account.id}
+                                        defaultChecked={
+                                          selectedAccountIdSet.has(
+                                            account.id,
+                                          )
+                                        }
+                                        className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                                      />
+
+                                      <span>
+                                        {[
+                                          provider?.name,
+                                          account.name,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+
+                                        {!account.is_active && (
+                                          <span className="ml-1 text-xs text-slate-400">
+                                            inactive
+                                          </span>
+                                        )}
+                                      </span>
+                                    </label>
+                                  );
+                                },
+                              )}
+                            </div>
+                          </div>
+                        ) : null,
+                    )}
+
+                    <p className="pt-3 text-[11px] leading-4 text-slate-500">
+                      Leave every account unchecked to include the entire
+                      workspace.
+                    </p>
+                  </div>
+                </details>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500">
+                  Account filters match operations touching at least one
+                  selected account.
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/portfolio/operations"
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Clear all
+                  </Link>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                  >
+                    Apply filters
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <div className="mt-6">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Filtered summary
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Posted cash movements in {workspaceBaseCurrency}.
+                    Draft and voided operations are excluded from totals.
+                  </p>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  {postedSummaryOperations} posted cash{" "}
+                  {postedSummaryOperations === 1
+                    ? "operation"
+                    : "operations"}{" "}
+                  summarized
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                    Matched operations
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-slate-900">
+                    {totalFilteredOperations}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-blue-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-blue-700">
+                    Purchases
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-blue-900">
+                    {formatAmount(purchaseTotal)} {workspaceBaseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-emerald-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-700">
+                    Sales
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-emerald-900">
+                    {formatAmount(saleTotal)} {workspaceBaseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                    Deposits
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-slate-900">
+                    {formatAmount(depositTotal)} {workspaceBaseCurrency}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-violet-50 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-violet-700">
+                    Dividends
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-violet-900">
+                    {formatAmount(dividendTotal)} {workspaceBaseCurrency}
+                  </p>
+                </div>
+
+                <div
+                  className={
+                    netCashTotal >= 0
+                      ? "rounded-xl bg-emerald-50 p-4"
+                      : "rounded-xl bg-red-50 p-4"
+                  }
+                >
+                  <p
+                    className={
+                      netCashTotal >= 0
+                        ? "text-xs font-medium uppercase tracking-[0.12em] text-emerald-700"
+                        : "text-xs font-medium uppercase tracking-[0.12em] text-red-700"
+                    }
+                  >
+                    Net cash
+                  </p>
+
+                  <p
+                    className={
+                      netCashTotal >= 0
+                        ? "mt-2 text-xl font-semibold text-emerald-900"
+                        : "mt-2 text-xl font-semibold text-red-900"
+                    }
+                  >
+                    {netCashTotal >= 0 ? "+" : ""}
+                    {formatAmount(netCashTotal)} {workspaceBaseCurrency}
+                  </p>
+                </div>
+              </div>
+
+              {selectedAccountIds.length > 0 && (
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Summary cash totals include only entries belonging to the
+                  selected accounts. The operation list still shows the full
+                  ledger context for each matched operation.
+                </p>
+              )}
+
+              {incompleteSummaryOperations > 0 && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                  {incompleteSummaryOperations} posted{" "}
+                  {incompleteSummaryOperations === 1
+                    ? "operation could"
+                    : "operations could"}{" "}
+                  not be included in cash totals because a non-base-currency
+                  cash entry has no stored {workspaceBaseCurrency} value.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-7 flex flex-col gap-2 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-900">
+                  Matching operations
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  {totalFilteredOperations > 0
+                    ? `Showing ${visibleFrom}–${visibleTo} of ${totalFilteredOperations}.`
+                    : "No operations match the selected filters."}
+                </p>
+              </div>
+
+              {totalPages > 1 && (
+                <p className="text-xs text-slate-500">
+                  Page {currentPage} of {totalPages}
+                </p>
+              )}
+            </div>
+
             {operations.length > 0 ? (
-              <ul className="mt-6 divide-y divide-slate-200">
+              <ul className="mt-5 divide-y divide-slate-200">
                 {operations.map((operation) => {
                   const entries =
                     entriesByOperation.get(
@@ -601,10 +1950,20 @@ export default async function OperationsPage({
                                   .join(" · ")
                               : null;
 
+                            const isSelectedAccount =
+                              selectedAccountIdSet.size === 0 ||
+                              selectedAccountIdSet.has(
+                                entry.account_id,
+                              );
+
                             return (
                               <li
                                 key={entry.id}
-                                className="flex flex-col gap-3 rounded-lg bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                className={
+                                  isSelectedAccount
+                                    ? "flex flex-col gap-3 rounded-lg bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                    : "flex flex-col gap-3 rounded-lg bg-slate-50/60 px-3 py-3 opacity-60 sm:flex-row sm:items-center sm:justify-between"
+                                }
                               >
                                 <div>
                                   <p className="text-sm text-slate-600">
@@ -650,7 +2009,7 @@ export default async function OperationsPage({
                                     </span>
                                   )}
 
-                                 {valueDelta !== 0 &&
+                                  {valueDelta !== 0 &&
                                     entry.component === "adjustment" &&
                                     quantityDelta === 0 &&
                                     cashDelta === 0 && (
@@ -677,15 +2036,49 @@ export default async function OperationsPage({
                 })}
               </ul>
             ) : (
-              <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
+              <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
                 <p className="font-medium">
-                  No operations yet
+                  No matching operations
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Add the first real portfolio
-                  operation using the form.
+                  Change or clear the filters to view other portfolio
+                  operations.
                 </p>
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-200 pt-5">
+                {currentPage > 1 ? (
+                  <Link
+                    href={buildOperationsHref({
+                      page: currentPage - 1,
+                    })}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    ← Previous
+                  </Link>
+                ) : (
+                  <span />
+                )}
+
+                <span className="text-xs text-slate-500">
+                  {visibleFrom}–{visibleTo} of {totalFilteredOperations}
+                </span>
+
+                {currentPage < totalPages ? (
+                  <Link
+                    href={buildOperationsHref({
+                      page: currentPage + 1,
+                    })}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Next →
+                  </Link>
+                ) : (
+                  <span />
+                )}
               </div>
             )}
           </section>

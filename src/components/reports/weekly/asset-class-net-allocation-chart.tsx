@@ -31,6 +31,12 @@ type Point = {
   y: number;
 };
 
+type PieSegment = {
+  item: WeeklyAssetClassChartItem;
+  startAngle: number;
+  endAngle: number;
+};
+
 const CHART_WIDTH =
   1500;
 
@@ -45,6 +51,12 @@ const CENTER_Y =
 
 const RADIUS =
   300;
+
+const CONTRIBUTION_THRESHOLD =
+  1000;
+
+const ZERO_EPSILON =
+  0.000001;
 
 function formatAmount(
   value: number,
@@ -153,6 +165,63 @@ function describePieSegment(
   ].join(" ");
 }
 
+function buildSegments(
+  items: WeeklyAssetClassChartItem[],
+  valueOf: (
+    item: WeeklyAssetClassChartItem,
+  ) => number,
+): PieSegment[] {
+  const total =
+    items.reduce(
+      (
+        sum,
+        item,
+      ) =>
+        sum +
+        valueOf(item),
+      0,
+    );
+
+  if (total <= 0) {
+    return [];
+  }
+
+  let precedingValue = 0;
+
+  return items.map(
+    (item) => {
+      const currentValue =
+        valueOf(item);
+
+      const startAngle =
+        (
+          precedingValue /
+          total
+        ) *
+        360;
+
+      const endAngle =
+        (
+          (
+            precedingValue +
+            currentValue
+          ) /
+          total
+        ) *
+        360;
+
+      precedingValue +=
+        currentValue;
+
+      return {
+        item,
+        startAngle,
+        endAngle,
+      };
+    },
+  );
+}
+
 export function AssetClassNetAllocationChart({
   items,
   fromDate,
@@ -180,6 +249,12 @@ export function AssetClassNetAllocationChart({
       string | null
     >(null);
 
+  const usesNetBalanceVariant =
+    externalContributionsBase >=
+      CONTRIBUTION_THRESHOLD &&
+    netTradingBase >
+      ZERO_EPSILON;
+
   const positiveItems =
     items.filter(
       (item) =>
@@ -194,125 +269,136 @@ export function AssetClassNetAllocationChart({
         0,
     );
 
-  const positiveTotal =
-    positiveItems.reduce(
+  const absoluteActivityTotal =
+    items.reduce(
       (
         sum,
         item,
       ) =>
         sum +
-        item.netValueBase,
+        Math.abs(
+          item.netValueBase,
+        ),
       0,
     );
 
   const positiveSegments =
-    positiveItems.map(
-        (item, index) => {
-        const precedingValue =
-            positiveItems
-            .slice(
-                0,
-                index,
-            )
-            .reduce(
-                (
-                sum,
-                precedingItem,
-                ) =>
-                sum +
-                precedingItem.netValueBase,
-                0,
-            );
-
-        const startAngle =
-            positiveTotal > 0
-            ? (
-                precedingValue /
-                positiveTotal
-                ) *
-                360
-            : 0;
-
-        const endAngle =
-            positiveTotal > 0
-            ? (
-                (
-                    precedingValue +
-                    item.netValueBase
-                ) /
-                positiveTotal
-                ) *
-                360
-            : 0;
-
-        return {
-            item,
-            startAngle,
-            endAngle,
-        };
-      },
+    buildSegments(
+      positiveItems,
+      (item) =>
+        item.netValueBase,
     );
 
-    const negativeSegments =
-    negativeItems.map(
-        (item, index) => {
-        const precedingMagnitude =
-            negativeItems
-            .slice(
-                0,
-                index,
-            )
-            .reduce(
-                (
-                sum,
-                precedingItem,
-                ) =>
-                sum +
-                Math.abs(
-                    precedingItem.netValueBase,
-                ),
-                0,
-            );
+  let precedingNegativeMagnitude =
+    0;
 
-        const currentMagnitude =
-            Math.abs(
-            item.netValueBase,
-            );
+  const negativeOverlaySegments =
+    usesNetBalanceVariant
+      ? negativeItems.map(
+          (item) => {
+            const currentMagnitude =
+              Math.abs(
+                item.netValueBase,
+              );
 
-        const startAngle =
-            netTradingBase > 0
-            ? Math.min(
+            const startAngle =
+              Math.min(
                 (
-                    precedingMagnitude /
-                    netTradingBase
+                  precedingNegativeMagnitude /
+                  netTradingBase
                 ) *
-                    360,
+                  360,
                 359.999,
-                )
-            : 0;
+              );
 
-        const endAngle =
-            netTradingBase > 0
-            ? Math.min(
+            const endAngle =
+              Math.min(
                 (
-                    (
-                    precedingMagnitude +
+                  (
+                    precedingNegativeMagnitude +
                     currentMagnitude
-                    ) /
-                    netTradingBase
+                  ) /
+                  netTradingBase
                 ) *
-                    360,
+                  360,
                 359.999,
-                )
-            : 0;
+              );
 
-        return {
-            item,
-            startAngle,
-            endAngle,
-        };
-      },
+            precedingNegativeMagnitude +=
+              currentMagnitude;
+
+            return {
+              item,
+              startAngle,
+              endAngle,
+            };
+          },
+        )
+      : [];
+
+  const absoluteActivitySegments =
+    buildSegments(
+      items.filter(
+        (item) =>
+          Math.abs(
+            item.netValueBase,
+          ) >
+          ZERO_EPSILON,
+      ),
+      (item) =>
+        Math.abs(
+          item.netValueBase,
+        ),
     );
+
+  function percentageForItem(
+    item: WeeklyAssetClassChartItem,
+  ): number {
+    if (usesNetBalanceVariant) {
+      return (
+        item.netValueBase /
+        netTradingBase
+      ) *
+        100;
+    }
+
+    if (
+      absoluteActivityTotal <=
+      ZERO_EPSILON
+    ) {
+      return 0;
+    }
+
+    return (
+      Math.abs(
+        item.netValueBase,
+      ) /
+      absoluteActivityTotal
+    ) *
+      100;
+  }
+
+  const chartTitle =
+    usesNetBalanceVariant
+      ? "Net new assets by asset class"
+      : "Net asset-class trading activity";
+
+  const variantDescription =
+    usesNetBalanceVariant
+      ? `External contributions are at least ${formatAmount(
+          CONTRIBUTION_THRESHOLD,
+        )} ${baseCurrency}, so percentages use total net trading balance.`
+      : externalContributionsBase <
+          CONTRIBUTION_THRESHOLD
+        ? `External contributions are below ${formatAmount(
+            CONTRIBUTION_THRESHOLD,
+          )} ${baseCurrency}, so percentages use total absolute net trading activity.`
+        : "Net trading balance is not positive, so percentages use total absolute net trading activity.";
+
+  const footerExplanation =
+    usesNetBalanceVariant
+      ? "Percentages use total net trading balance. Stripes mark negative asset-class net activity."
+      : "Percentages use total absolute net trading activity. Stripes mark negative asset-class net activity.";
 
   async function handleDownload() {
     const svg =
@@ -355,12 +441,17 @@ export function AssetClassNetAllocationChart({
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-600">
-          Positive net classes
-          form the pie. Negative
-          classes are shown as
-          striped overlays.
-        </p>
+        <div className="text-sm text-slate-600">
+          <p>
+            {usesNetBalanceVariant
+              ? "Large-contribution mode: positive net classes form the pie and negative classes are shown as striped overlays."
+              : "Rotation mode: all net asset-class activity forms the pie by absolute magnitude; negative classes are striped."}
+          </p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            {variantDescription}
+          </p>
+        </div>
 
         <button
           type="button"
@@ -463,104 +554,205 @@ export function AssetClassNetAllocationChart({
             fontWeight={600}
             fill="#0f172a"
           >
-            Net new assets by
-            asset class —{" "}
+            {chartTitle}
+            {" — "}
             {reportDateLabel(
               fromDate,
               toDate,
             )}
           </text>
 
-          {positiveSegments.length >
-          0 ? (
+          {usesNetBalanceVariant ? (
+            positiveSegments.length >
+            0 ? (
+              <>
+                {positiveSegments.map(
+                  ({
+                    item,
+                    startAngle,
+                    endAngle,
+                  }) => (
+                    <path
+                      key={
+                        item.assetClassId ??
+                        item.assetClassName
+                      }
+                      d={describePieSegment(
+                        startAngle,
+                        endAngle,
+                      )}
+                      fill={
+                        item.assetClassColor
+                      }
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                    >
+                      <title>
+                        {
+                          item.assetClassName
+                        }
+                        {": "}
+                        {formatAmount(
+                          item.netValueBase,
+                        )}{" "}
+                        {
+                          baseCurrency
+                        }
+                        {" · "}
+                        {formatPercentage(
+                          percentageForItem(
+                            item,
+                          ),
+                        )}
+                        %
+                      </title>
+                    </path>
+                  ),
+                )}
+
+                {negativeOverlaySegments.map(
+                  (
+                    {
+                      item,
+                      startAngle,
+                      endAngle,
+                    },
+                    index,
+                  ) => (
+                    <path
+                      key={`negative-${
+                        item.assetClassId ??
+                        item.assetClassName
+                      }`}
+                      d={describePieSegment(
+                        startAngle,
+                        endAngle,
+                      )}
+                      fill={`url(#weekly-negative-hatch-${index})`}
+                      stroke={
+                        item.assetClassColor
+                      }
+                      strokeWidth={2}
+                    >
+                      <title>
+                        {
+                          item.assetClassName
+                        }
+                        {": −"}
+                        {formatAmount(
+                          Math.abs(
+                            item.netValueBase,
+                          ),
+                        )}{" "}
+                        {
+                          baseCurrency
+                        }
+                        {" · "}
+                        {formatPercentage(
+                          percentageForItem(
+                            item,
+                          ),
+                        )}
+                        %
+                      </title>
+                    </path>
+                  ),
+                )}
+              </>
+            ) : (
+              <text
+                x={
+                  CENTER_X
+                }
+                y={
+                  CENTER_Y
+                }
+                textAnchor="middle"
+                fontSize={22}
+                fill="#64748b"
+              >
+                No positive net
+                asset classes
+              </text>
+            )
+          ) : absoluteActivitySegments.length >
+            0 ? (
             <>
-              {positiveSegments.map(
+              {absoluteActivitySegments.map(
                 ({
                   item,
                   startAngle,
                   endAngle,
-                }) => (
-                  <path
-                    key={
-                      item.assetClassId ??
-                      item.assetClassName
-                    }
-                    d={describePieSegment(
-                      startAngle,
-                      endAngle,
-                    )}
-                    fill={
-                      item.assetClassColor
-                    }
-                    stroke="#ffffff"
-                    strokeWidth={4}
-                  >
-                    <title>
-                      {
-                        item.assetClassName
-                      }
-                      {": "}
-                      {formatAmount(
-                        item.netValueBase,
-                      )}{" "}
-                      {
-                        baseCurrency
-                      }
-                      {" · "}
-                      {formatPercentage(
-                        item.percentageOfNet,
-                      )}
-                      %
-                    </title>
-                  </path>
-                ),
-              )}
+                }) => {
+                  const isNegative =
+                    item.netValueBase <
+                    0;
 
-              {negativeSegments.map(
-                (
-                  {
-                    item,
-                    startAngle,
-                    endAngle,
-                  },
-                  index,
-                ) => (
-                  <path
-                    key={`negative-${
-                      item.assetClassId ??
-                      item.assetClassName
-                    }`}
-                    d={describePieSegment(
-                      startAngle,
-                      endAngle,
-                    )}
-                    fill={`url(#weekly-negative-hatch-${index})`}
-                    stroke={
-                      item.assetClassColor
-                    }
-                    strokeWidth={2}
-                  >
-                    <title>
-                      {
+                  const negativeIndex =
+                    negativeItems.findIndex(
+                      (
+                        negative,
+                      ) =>
+                        negative.assetClassId ===
+                          item.assetClassId &&
+                        negative.assetClassName ===
+                          item.assetClassName,
+                    );
+
+                  return (
+                    <path
+                      key={
+                        item.assetClassId ??
                         item.assetClassName
                       }
-                      {": −"}
-                      {formatAmount(
-                        Math.abs(
-                          item.netValueBase,
-                        ),
-                      )}{" "}
-                      {
-                        baseCurrency
-                      }
-                      {" · "}
-                      {formatPercentage(
-                        item.percentageOfNet,
+                      d={describePieSegment(
+                        startAngle,
+                        endAngle,
                       )}
-                      %
-                    </title>
-                  </path>
-                ),
+                      fill={
+                        isNegative
+                          ? `url(#weekly-negative-hatch-${negativeIndex})`
+                          : item.assetClassColor
+                      }
+                      stroke={
+                        isNegative
+                          ? item.assetClassColor
+                          : "#ffffff"
+                      }
+                      strokeWidth={
+                        isNegative
+                          ? 2
+                          : 4
+                      }
+                    >
+                      <title>
+                        {
+                          item.assetClassName
+                        }
+                        {": "}
+                        {item.netValueBase <
+                        0
+                          ? "−"
+                          : ""}
+                        {formatAmount(
+                          Math.abs(
+                            item.netValueBase,
+                          ),
+                        )}{" "}
+                        {
+                          baseCurrency
+                        }
+                        {" · "}
+                        {formatPercentage(
+                          percentageForItem(
+                            item,
+                          ),
+                        )}
+                        %
+                      </title>
+                    </path>
+                  );
+                },
               )}
             </>
           ) : (
@@ -575,8 +767,8 @@ export function AssetClassNetAllocationChart({
               fontSize={22}
               fill="#64748b"
             >
-              No positive net
-              asset classes
+              No net asset-class
+              trading activity
             </text>
           )}
 
@@ -587,7 +779,9 @@ export function AssetClassNetAllocationChart({
             fontWeight={700}
             fill="#0f172a"
           >
-            Net allocation
+            {usesNetBalanceVariant
+              ? "Net allocation"
+              : "Trading activity mix"}
           </text>
 
           {items.map(
@@ -701,13 +895,18 @@ export function AssetClassNetAllocationChart({
                     fontSize={20}
                     fontWeight={700}
                     fill={
-                      isNegative
+                      isNegative &&
+                      usesNetBalanceVariant
                         ? "#b45309"
-                        : "#0f172a"
+                        : isNegative
+                          ? item.assetClassColor
+                          : "#0f172a"
                     }
                   >
                     {formatPercentage(
-                      item.percentageOfNet,
+                      percentageForItem(
+                        item,
+                      ),
                     )}
                     %
                   </text>
@@ -770,12 +969,9 @@ export function AssetClassNetAllocationChart({
             fontSize={15}
             fill="#64748b"
           >
-            Percentages use
-            total net trading
-            balance. Stripes
-            mark negative
-            asset-class net
-            activity.
+            {
+              footerExplanation
+            }
           </text>
         </svg>
       </div>

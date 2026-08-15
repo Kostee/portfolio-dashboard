@@ -1,0 +1,120 @@
+﻿-- Government bond valuation cron setup.
+--
+-- Reuses the Vault secrets already created for the market-data workflows:
+--   market_sync_project_url
+--   market_sync_publishable_key
+--
+-- Adds one separate private secret:
+--   bond_valuation_cron_secret
+--
+-- The cron invokes the Edge Function every Saturday.
+-- The Edge Function itself performs Europe/Warsaw date gating and only
+-- writes valuations on the second Saturday of each month.
+--
+-- A single UTC schedule is sufficient:
+--   07:35 UTC = 08:35 Europe/Warsaw in winter
+--   07:35 UTC = 09:35 Europe/Warsaw in summer
+--
+-- Do NOT commit a filled-in copy containing the real secret.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- First-time setup only.
+-- Replace the placeholder with the same value used for the
+-- BOND_VALUATION_CRON_SECRET Edge Function secret.
+select vault.create_secret(
+  'YOUR_BOND_VALUATION_CRON_SECRET',
+  'bond_valuation_cron_secret'
+);
+
+-- Remove an older copy of the job before recreating it.
+do $$
+begin
+  if exists (
+    select 1
+    from cron.job
+    where jobname = 'government-bond-valuation-0735-utc'
+  ) then
+    perform cron.unschedule(
+      'government-bond-valuation-0735-utc'
+    );
+  end if;
+end
+$$;
+
+create or replace function
+  public.invoke_government_bond_valuation_sync()
+returns bigint
+language sql
+security definer
+set search_path = ''
+as $$
+  select net.http_post(
+    url :=
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_project_url'
+        order by created_at desc
+        limit 1
+      )
+      || '/functions/v1/sync-government-bond-valuations',
+
+    headers := jsonb_build_object(
+      'Content-Type',
+      'application/json',
+
+      'apikey',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'market_sync_publishable_key'
+        order by created_at desc
+        limit 1
+      ),
+
+      'x-bond-valuation-secret',
+      (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'bond_valuation_cron_secret'
+        order by created_at desc
+        limit 1
+      )
+    ),
+
+    body := jsonb_build_object(
+      'trigger',
+      'cron'
+    ),
+
+    timeout_milliseconds := 120000
+  );
+$$;
+
+revoke all
+  on function public.invoke_government_bond_valuation_sync()
+  from public, anon, authenticated;
+
+grant execute
+  on function public.invoke_government_bond_valuation_sync()
+  to service_role;
+
+-- Run every Saturday.
+-- Non-second Saturdays are intentionally rejected as no-ops
+-- by the Edge Function.
+select cron.schedule(
+  'government-bond-valuation-0735-utc',
+  '35 7 * * 6',
+  $$select public.invoke_government_bond_valuation_sync();$$
+);
+
+-- Verification.
+select
+  jobid,
+  jobname,
+  schedule,
+  active
+from cron.job
+where jobname = 'government-bond-valuation-0735-utc';

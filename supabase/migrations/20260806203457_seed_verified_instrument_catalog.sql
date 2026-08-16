@@ -1,0 +1,6 @@
+-- Private portfolio-specific instrument seed data was intentionally removed
+-- from the public repository.
+--
+-- This migration version is retained so existing Supabase migration
+-- histories remain aligned. Production data that was previously applied
+-- is not modified by this public migration stub.

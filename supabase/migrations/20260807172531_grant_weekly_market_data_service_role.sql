@@ -1,5 +1,3 @@
-﻿begin;
-
 -- Edge Function reads the automatic source catalog.
 grant select
   on table public.market_data_instrument_sources
@@ -55,5 +53,3 @@ grant select, insert, update
 grant select, insert, update
   on table public.exchange_rates
   to service_role;
-
-commit;

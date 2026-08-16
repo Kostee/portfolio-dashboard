@@ -1,5 +1,7 @@
 # Project Specification
 
+> Historical design document. This file records the original product requirements and early scope decisions. It is useful as design context, but it is not the current feature matrix. See `README.md`, `SELF_HOSTING.md` and the application code for the current implementation.
+
 ## 1. Overview
 
 Portfolio Dashboard is a private, self-hostable web application for manually tracking an investment portfolio and generating recurring portfolio reports.

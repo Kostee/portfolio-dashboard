@@ -1,9 +1,13 @@
 -- Public development seed.
 --
--- Intentionally empty.
+-- Intentionally empty by default.
 --
 -- Portfolio holdings, transactions, account holders, provider mappings and
 -- other deployment-specific financial data must not be committed here.
 --
--- Add only fictional demonstration data to the public seed if a future
--- development workflow explicitly requires it.
+-- For an explicit LOCAL-ONLY fictional dataset, run:
+--
+--   npm run demo:reset
+--
+-- The opt-in demo bootstrap lives in scripts/bootstrap-public-demo.mjs.
+-- It refuses a non-loopback Supabase API URL and does not modify .env.local.

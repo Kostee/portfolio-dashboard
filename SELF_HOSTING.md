@@ -98,6 +98,39 @@ http://localhost:3000
 
 Local Supabase Studio is available at the URL printed by `npx supabase start`.
 
+### Optional fictional local demo
+
+The default `supabase/seed.sql` intentionally contains no portfolio records.
+
+For an explicit fictional local dataset, run:
+
+```bash
+npm run demo:reset
+```
+
+This command is destructive to the **local** development database: it runs a local reset and then creates fictional Auth, workspace, portfolio, operation and valuation records.
+
+The bootstrap performs a loopback-host check before it uses the local server/admin credential and refuses a non-local Supabase API URL. The privileged credential is kept inside the local Node.js process and is never printed or written to a tracked file.
+
+The fictional login is:
+
+```text
+Email:    demo@example.com
+Password: DemoPortfolio2026!
+```
+
+Do not use these public demo credentials in a hosted deployment.
+
+The bootstrap deliberately does **not** edit `.env.local`. To view the demo in Next.js, point `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` at the local Supabase stack using the browser-safe values reported by the CLI.
+
+Running a normal:
+
+```bash
+npx supabase db reset
+```
+
+continues to produce an empty portfolio because the default public seed remains data-free.
+
 ## 3. Database deployment
 
 Create a new Supabase project.

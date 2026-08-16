@@ -134,6 +134,37 @@ http://localhost:3000
 
 For a hosted deployment, Edge Functions, scheduled workflows and provider secrets, see [`SELF_HOSTING.md`](SELF_HOSTING.md).
 
+## Fictional local demo
+
+The repository stays empty by default, but an explicit local-only demo can populate a fresh local Supabase database with fictional owners, accounts, instruments, operations and current valuations.
+
+Run:
+
+```bash
+npm run demo:reset
+```
+
+The command:
+
+- starts the local Supabase stack if needed,
+- resets **only the local database** from tracked migrations,
+- skips the default `supabase/seed.sql`,
+- refuses to continue unless the Supabase API URL is loopback/local,
+- creates a fictional authenticated user and workspace,
+- writes demo data through the application's normal authenticated/RLS paths,
+- leaves `.env.local` untouched.
+
+Local demo credentials:
+
+```text
+Email:    demo@example.com
+Password: DemoPortfolio2026!
+```
+
+These credentials are intentionally public and are for the local fictional demo only. Do not reuse them in a hosted deployment.
+
+To browse the demo, configure `.env.local` with the local Supabase URL and browser-safe key reported by the Supabase CLI, then run `npm run dev`.
+
 ## Development
 
 Run ESLint:
@@ -194,7 +225,7 @@ See [`SECURITY.md`](SECURITY.md) before deploying the application publicly.
 
 The application is actively developed and already includes the core portfolio ledger, reporting pipeline and automated market-data workflows.
 
-The public repository starts with an empty portfolio. Deployment-specific financial data must be supplied by the operator.
+The public repository starts with an empty portfolio by default. An opt-in, local-only fictional demo is available through `npm run demo:reset`; deployment-specific financial data must still be supplied by the operator.
 
 ## License
 

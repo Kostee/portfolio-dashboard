@@ -1,0 +1,9 @@
+-- Public development seed.
+--
+-- Intentionally empty.
+--
+-- Portfolio holdings, transactions, account holders, provider mappings and
+-- other deployment-specific financial data must not be committed here.
+--
+-- Add only fictional demonstration data to the public seed if a future
+-- development workflow explicitly requires it.

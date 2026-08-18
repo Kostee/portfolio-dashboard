@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  fetchNbpTableARate,
+} from "@/lib/finance/nbp-table-a";
 
 import {
   isValidIsoDate,
@@ -241,6 +244,33 @@ export async function createTradeOperation(
     );
   }
 
+  const {
+    data: workspace,
+    error: workspaceError,
+  } =
+    await supabase
+      .from("workspaces")
+      .select("base_currency")
+      .eq(
+        "id",
+        membership.workspace_id,
+      )
+      .single();
+
+  if (
+    workspaceError ||
+    !workspace
+  ) {
+    console.error(
+      "Trade workspace query failed:",
+      workspaceError,
+    );
+
+    redirect(
+      `${TRADE_ERROR_PATH}?error=workspace_not_found`,
+    );
+  }
+
   const [
     accountResult,
     instrumentResult,
@@ -311,6 +341,41 @@ export async function createTradeOperation(
     redirect(
       `${TRADE_ERROR_PATH}?error=currency_mismatch`,
     );
+  }
+
+  /*
+   * Manual base value remains an explicit
+   * override. Otherwise foreign-currency
+   * trades in a PLN-base workspace receive
+   * their official NBP Table A base value
+   * before the ledger RPC is called.
+   */
+  if (
+    baseValue === undefined &&
+    cashCurrency !==
+      workspace.base_currency
+  ) {
+    try {
+      const fx =
+        await fetchNbpTableARate(
+          cashCurrency,
+          operationDate,
+          workspace.base_currency,
+        );
+
+      baseValue =
+        actualCashAmount *
+        fx.rateToBase;
+    } catch (error) {
+      console.error(
+        "Trade FX normalization failed:",
+        error,
+      );
+
+      redirect(
+        `${TRADE_ERROR_PATH}?error=fx_rate_unavailable`,
+      );
+    }
   }
 
   if (fundingRouteId) {

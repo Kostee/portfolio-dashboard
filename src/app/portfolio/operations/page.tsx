@@ -2,6 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  fetchNbpTableARate,
+} from "@/lib/finance/nbp-table-a";
 import type { Database } from "@/types/database.types";
 
 import { createCashOperation } from "./actions";
@@ -56,6 +59,7 @@ type OperationEntrySummary = Pick<
   | "value_delta"
   | "currency"
   | "component"
+  | "fx_rate_to_base"
   | "base_cash_delta"
   | "base_value_delta"
 >;
@@ -480,7 +484,7 @@ async function loadAllOperationEntries(
         "portfolio_operation_entries",
       )
       .select(
-        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, value_delta, currency, component, base_cash_delta, base_value_delta",
+        "id, operation_id, sequence_no, account_id, instrument_id, quantity_delta, cash_delta, value_delta, currency, component, fx_rate_to_base, base_cash_delta, base_value_delta",
       )
       .eq(
         "workspace_id",
@@ -1078,6 +1082,9 @@ export default async function OperationsPage({
   let postedSummaryOperations =
     0;
 
+  const summaryFxCache =
+    new Map<string, number>();
+
   for (
     const operation of
     filteredOperations
@@ -1153,6 +1160,73 @@ export default async function OperationsPage({
           cashDelta;
 
         continue;
+      }
+
+      if (
+        entry.fx_rate_to_base !==
+        null
+      ) {
+        const storedRate =
+          Number(
+            entry.fx_rate_to_base,
+          );
+
+        if (
+          Number.isFinite(
+            storedRate,
+          ) &&
+          storedRate > 0
+        ) {
+          operationBaseCash +=
+            cashDelta *
+            storedRate;
+
+          continue;
+        }
+      }
+
+      if (
+        workspaceBaseCurrency ===
+          "PLN" &&
+        entry.currency
+      ) {
+        const cacheKey =
+          `${entry.currency}|${operation.operation_date}`;
+
+        try {
+          let rate =
+            summaryFxCache.get(
+              cacheKey,
+            );
+
+          if (rate === undefined) {
+            const fx =
+              await fetchNbpTableARate(
+                entry.currency,
+                operation.operation_date,
+                workspaceBaseCurrency,
+              );
+
+            rate =
+              fx.rateToBase;
+
+            summaryFxCache.set(
+              cacheKey,
+              rate,
+            );
+          }
+
+          operationBaseCash +=
+            cashDelta *
+            rate;
+
+          continue;
+        } catch (error) {
+          console.error(
+            `Operation ${operation.id} cash summary FX fallback failed:`,
+            error,
+          );
+        }
       }
 
       canSummarizeOperation =

@@ -13,6 +13,14 @@ import {
 } from "@/lib/supabase/server";
 
 import {
+  fetchNbpTableARate,
+} from "@/lib/finance/nbp-table-a";
+
+import type {
+  NbpTableARate,
+} from "@/lib/finance/nbp-table-a";
+
+import {
   isValidIsoDate,
   readText,
 } from "@/app/portfolio/operations/form-helpers";
@@ -22,22 +30,6 @@ const WEEKLY_REPORT_PATH =
 
 const FALLBACK_ASSET_COLOR =
   "#64748b";
-
-type FrozenFxRate = {
-  currency: string;
-  operationDate: string;
-  rateDate: string;
-  rateToBase: number;
-  source: "NBP_A";
-};
-
-type NbpRateResponse = {
-  code?: string;
-  rates?: Array<{
-    effectiveDate?: string;
-    mid?: number;
-  }>;
-};
 
 type MutableInstrumentItem = {
   instrumentId: string;
@@ -58,25 +50,6 @@ type MutableInstrumentItem = {
 
   operationIds: Set<string>;
 };
-
-function shiftIsoDate(
-  value: string,
-  days: number,
-): string {
-  const parsed =
-    new Date(
-      `${value}T00:00:00Z`,
-    );
-
-  parsed.setUTCDate(
-    parsed.getUTCDate() +
-      days,
-  );
-
-  return parsed
-    .toISOString()
-    .slice(0, 10);
-}
 
 function redirectWithError(
   error: string,
@@ -105,104 +78,6 @@ function redirectWithError(
   redirect(
     `${WEEKLY_REPORT_PATH}?${params.toString()}`,
   );
-}
-
-async function fetchNbpRate(
-  currency: string,
-  operationDate: string,
-): Promise<FrozenFxRate> {
-  if (
-    currency !== "USD" &&
-    currency !== "EUR"
-  ) {
-    throw new Error(
-      `Unsupported weekly-report FX currency: ${currency}.`,
-    );
-  }
-
-  /*
-   * Seven calendar days is enough to cross a
-   * normal weekend and Polish public holidays.
-   */
-  const startDate =
-    shiftIsoDate(
-      operationDate,
-      -7,
-    );
-
-  const url =
-    "https://api.nbp.pl/api/exchangerates/rates/a/" +
-    `${currency}/${startDate}/${operationDate}/?format=json`;
-
-  const response =
-    await fetch(
-      url,
-      {
-        cache: "no-store",
-        headers: {
-          Accept:
-            "application/json",
-        },
-      },
-    );
-
-  if (!response.ok) {
-    throw new Error(
-      `NBP returned HTTP ${response.status} for ${currency}/${operationDate}.`,
-    );
-  }
-
-  const payload =
-    await response.json() as
-      NbpRateResponse;
-
-  const latest =
-    (payload.rates ?? [])
-      .filter(
-        (rate) =>
-          typeof rate.effectiveDate ===
-            "string" &&
-          typeof rate.mid ===
-            "number" &&
-          Number.isFinite(
-            rate.mid,
-          ) &&
-          rate.mid > 0 &&
-          rate.effectiveDate <=
-            operationDate,
-      )
-      .sort(
-        (
-          first,
-          second,
-        ) =>
-          (
-            second.effectiveDate ??
-            ""
-          ).localeCompare(
-            first.effectiveDate ??
-              "",
-          ),
-      )[0];
-
-  if (
-    !latest?.effectiveDate ||
-    !latest.mid
-  ) {
-    throw new Error(
-      `No NBP table A rate was available for ${currency} through ${operationDate}.`,
-    );
-  }
-
-  return {
-    currency,
-    operationDate,
-    rateDate:
-      latest.effectiveDate,
-    rateToBase:
-      latest.mid,
-    source: "NBP_A",
-  };
 }
 
 export async function generateWeeklyOperationReport(
@@ -547,7 +422,7 @@ export async function generateWeeklyOperationReport(
   const fxCache =
     new Map<
       string,
-      FrozenFxRate
+      NbpTableARate
     >();
 
   const grouped =
@@ -633,7 +508,7 @@ export async function generateWeeklyOperationReport(
 
           if (!fx) {
             fx =
-              await fetchNbpRate(
+              await fetchNbpTableARate(
                 leg.currency,
                 operationDate,
               );

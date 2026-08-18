@@ -7,12 +7,8 @@ import {
 } from "@/lib/finance/nbp-table-a";
 import type { Database } from "@/types/database.types";
 
-import { createCashOperation } from "./actions";
 import { getDateInTimeZone } from "./form-helpers";
 import {
-  CASH_OPERATION_TYPE_LABELS,
-  CASH_OPERATION_TYPES,
-  OPERATION_CURRENCIES,
   OPERATION_TYPE_LABELS,
 } from "./operation-options";
 
@@ -23,8 +19,6 @@ type SearchParamValue =
 
 type OperationsPageProps = {
   searchParams: Promise<{
-    error?: SearchParamValue;
-    success?: SearchParamValue;
     range?: SearchParamValue;
     from?: SearchParamValue;
     to?: SearchParamValue;
@@ -556,16 +550,6 @@ export default async function OperationsPage({
   const resolvedSearchParams =
     await searchParams;
 
-  const errorCode =
-    firstSearchParam(
-      resolvedSearchParams.error,
-    );
-
-  const success =
-    firstSearchParam(
-      resolvedSearchParams.success,
-    );
-
   const requestedRange =
     firstSearchParam(
       resolvedSearchParams.range,
@@ -855,12 +839,6 @@ export default async function OperationsPage({
       second.name,
     );
   });
-
-  const activeAccounts =
-    sortedAccounts.filter(
-      (account) =>
-        account.is_active,
-    );
 
   const entriesByOperation =
     new Map<
@@ -1412,6 +1390,21 @@ export default async function OperationsPage({
 
         <nav className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Link
+            href="/portfolio/operations/cash"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <p className="font-medium">
+              Add cash operation
+            </p>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Record a deposit, withdrawal,
+              interest, fee or tax without
+              changing instrument quantity.
+            </p>
+          </Link>
+
+          <Link
             href="/portfolio/operations/trade"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
           >
@@ -1463,9 +1456,8 @@ export default async function OperationsPage({
 
             <p className="mt-2 text-sm text-slate-600">
               Record a contribution routed through
-              Walutomat, Revolut or another external
-              channel before reaching a portfolio
-              account.
+              an external channel before reaching a
+              portfolio account.
             </p>
           </Link>
 
@@ -1482,23 +1474,9 @@ export default async function OperationsPage({
               detailed tracking begins.
             </p>
           </Link>
-
-          <Link
-            href="/portfolio/state"
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-          >
-            <p className="font-medium">
-              Portfolio state
-            </p>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Review calculated positions, cash balances and
-              consistency warnings.
-            </p>
-          </Link>
         </nav>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="mt-6">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -2157,242 +2135,7 @@ export default async function OperationsPage({
             )}
           </section>
 
-          <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold">
-              Add cash operation
-            </h2>
 
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Cash operations affect an account
-              balance without changing an instrument
-              quantity.
-            </p>
-
-            {success === "operation_added" && (
-              <p className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                The operation was posted.
-              </p>
-            )}
-
-            {errorCode && (
-              <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-                The operation could not be posted.
-                Check the selected values and server
-                log.
-              </p>
-            )}
-
-            {canEdit &&
-            activeAccounts.length > 0 ? (
-              <form
-                action={createCashOperation}
-                className="mt-6 space-y-4"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="operationDate"
-                      className="block text-sm font-medium text-slate-700"
-                    >
-                      Operation date
-                    </label>
-
-                    <input
-                      id="operationDate"
-                      name="operationDate"
-                      type="date"
-                      required
-                      defaultValue={today}
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="operationTime"
-                      className="block text-sm font-medium text-slate-700"
-                    >
-                      Operation time
-                      <span className="ml-1 font-normal text-slate-500">
-                        (optional)
-                      </span>
-                    </label>
-
-                    <input
-                      id="operationTime"
-                      name="operationTime"
-                      type="time"
-                      step={60}
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    />
-
-                    <p className="mt-2 text-xs text-slate-500">
-                      {workspaceTimeZone}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="operationType"
-                    className="block text-sm font-medium text-slate-700"
-                  >
-                    Operation type
-                  </label>
-
-                  <select
-                    id="operationType"
-                    name="operationType"
-                    defaultValue="deposit"
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                  >
-                    {CASH_OPERATION_TYPES.map(
-                      (operationType) => (
-                        <option
-                          key={operationType}
-                          value={operationType}
-                        >
-                          {
-                            CASH_OPERATION_TYPE_LABELS[
-                              operationType
-                            ]
-                          }
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="accountId"
-                    className="block text-sm font-medium text-slate-700"
-                  >
-                    Account
-                  </label>
-
-                  <select
-                    id="accountId"
-                    name="accountId"
-                    required
-                    defaultValue=""
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                  >
-                    <option value="" disabled>
-                      Select account
-                    </option>
-
-                    {activeAccounts.map(
-                      (account) => {
-                        const owner =
-                          ownerMap.get(
-                            account.owner_id,
-                          );
-
-                        const provider =
-                          providerMap.get(
-                            account.provider_id,
-                          );
-
-                        return (
-                          <option
-                            key={account.id}
-                            value={account.id}
-                          >
-                            {[
-                              owner?.display_name,
-                              provider?.name,
-                              account.name,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </option>
-                        );
-                      },
-                    )}
-                  </select>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="amount"
-                      className="block text-sm font-medium text-slate-700"
-                    >
-                      Amount
-                    </label>
-
-                    <input
-                      id="amount"
-                      name="amount"
-                      type="number"
-                      required
-                      min="0.01"
-                      step="0.01"
-                      placeholder="500.00"
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="currency"
-                      className="block text-sm font-medium text-slate-700"
-                    >
-                      Currency
-                    </label>
-
-                    <select
-                      id="currency"
-                      name="currency"
-                      defaultValue="PLN"
-                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    >
-                      {OPERATION_CURRENCIES.map(
-                        (currency) => (
-                          <option
-                            key={currency}
-                            value={currency}
-                          >
-                            {currency}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-slate-700"
-                  >
-                    Description
-                  </label>
-
-                  <input
-                    id="description"
-                    name="description"
-                    type="text"
-                    maxLength={250}
-                    placeholder="Weekly portfolio contribution"
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700"
-                >
-                  Post operation
-                </button>
-              </form>
-            ) : (
-              <p className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Operation creation is unavailable.
-              </p>
-            )}
-          </aside>
         </div>
       </div>
     </main>

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { StateSnapshotComparisonChart } from "@/components/portfolio/state-snapshot-comparison-chart";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildStateSnapshotComparison,
+  STATE_FOREIGN_ASSET_CLASS_CODES,
+  type StateComparisonBaselineItem,
+} from "@/lib/portfolio/state-snapshot-comparison";
 import type { Database } from "@/types/database.types";
 
 type ValuedUnitPosition =
@@ -580,6 +586,67 @@ export default async function PortfolioStatePage() {
     );
   }
 
+  const {
+    data: latestMonthlyReport,
+    error: latestMonthlyReportError,
+  } = await supabase
+    .from("portfolio_report_runs")
+    .select("id, as_of_date, revision")
+    .eq(
+      "workspace_id",
+      membership.workspace_id,
+    )
+    .eq("report_type", "monthly")
+    .neq("status", "voided")
+    .order("as_of_date", {
+      ascending: false,
+    })
+    .order("revision", {
+      ascending: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestMonthlyReportError) {
+    console.error(
+      "Latest monthly report query failed:",
+      latestMonthlyReportError,
+    );
+  }
+
+  let latestMonthlyReportItems:
+    StateComparisonBaselineItem[] = [];
+
+  if (latestMonthlyReport) {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("portfolio_report_items")
+      .select(
+        "instrument_id, instrument_name, instrument_ticker, asset_class_name, asset_class_code, asset_class_color, asset_class_sort_order, quantity, market_value_base",
+      )
+      .eq(
+        "workspace_id",
+        membership.workspace_id,
+      )
+      .eq(
+        "report_run_id",
+        latestMonthlyReport.id,
+      );
+
+    if (error) {
+      console.error(
+        "Latest monthly report item query failed:",
+        error,
+      );
+    } else {
+      latestMonthlyReportItems =
+        (data ??
+          []) as StateComparisonBaselineItem[];
+    }
+  }
+
   const workspace = workspaceResult.data;
 
   const workspaceBaseCurrency =
@@ -616,6 +683,55 @@ export default async function PortfolioStatePage() {
       (assetClass) =>
         assetClass.instruments,
     );
+
+  const snapshotComparisonItems =
+    buildStateSnapshotComparison({
+      current:
+        instrumentPositionGroups.map(
+          (instrument) => ({
+            instrumentId:
+              instrument.instrumentId,
+            instrumentName:
+              instrument.instrumentName,
+            instrumentTicker:
+              instrument.instrumentTicker,
+            assetClassName:
+              instrument.assetClassName,
+            assetClassCode:
+              instrument.assetClassCode,
+            assetClassColor:
+              instrument.assetClassColor,
+            assetClassSortOrder:
+              instrument.assetClassSortOrder,
+            quantity:
+              instrument.totalQuantity,
+            estimatedBaseValue:
+              instrument.totalEstimatedBaseValue,
+          }),
+        ),
+      baseline:
+        latestMonthlyReportItems,
+    });
+
+  const gpwSnapshotComparisonItems =
+    snapshotComparisonItems.filter(
+      (item) =>
+        item.assetClassCode ===
+        "polish_stocks",
+    );
+
+  const foreignSnapshotComparisonItems =
+    snapshotComparisonItems.filter(
+      (item) =>
+        STATE_FOREIGN_ASSET_CLASS_CODES.includes(
+          item.assetClassCode as
+            (typeof STATE_FOREIGN_ASSET_CLASS_CODES)[number],
+        ),
+    );
+
+  const latestMonthlyBaselineDate =
+    latestMonthlyReport?.as_of_date ??
+    null;
 
   const heldInstrumentCount =
     instrumentPositionGroups.length;
@@ -784,154 +900,36 @@ export default async function PortfolioStatePage() {
           </div>
         </section>
 
-        {warningCount > 0 ? (
-          <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6">
-            <h2 className="text-lg font-semibold text-amber-900">
-              Incomplete or inconsistent state
-            </h2>
+        <div className="mt-6 grid gap-6">
+          <StateSnapshotComparisonChart
+            title="GPW portfolio structure"
+            description="Current Polish-stock holdings compared with the latest frozen monthly quantities."
+            items={
+              gpwSnapshotComparisonItems
+            }
+            baselineDate={
+              latestMonthlyBaselineDate
+            }
+            baseCurrency={
+              workspaceBaseCurrency
+            }
+          />
 
-            <p className="mt-2 text-sm leading-6 text-amber-800">
-              Negative balances usually mean that
-              an opening balance or an earlier
-              operation is missing. A valuation
-              mismatch means that the latest
-              snapshot quantity differs from the
-              current ledger quantity.
-            </p>
-
-            <div className="mt-4 space-y-2">
-              {negativeUnitPositions.map(
-                (position) => (
-                  <p
-                    key={`negative-units-${position.account_id}-${position.instrument_id}`}
-                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
-                  >
-                    Negative units:{" "}
-                    {getAccountDescription(
-                      position.owner_name,
-                      position.provider_name,
-                      position.account_name,
-                    )}{" "}
-                    ·{" "}
-                    {position.instrument_ticker ||
-                      position.instrument_name}{" "}
-                    ·{" "}
-                    {formatQuantity(
-                      Number(
-                        position.quantity ?? 0,
-                      ),
-                    )}
-                  </p>
-                ),
-              )}
-
-              {negativeCashBalances.map(
-                (balance) => (
-                  <p
-                    key={`negative-cash-${balance.account_id}-${balance.currency}`}
-                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
-                  >
-                    Negative cash:{" "}
-                    {getAccountDescription(
-                      balance.owner_name,
-                      balance.provider_name,
-                      balance.account_name,
-                    )}{" "}
-                    ·{" "}
-                    {formatAmount(
-                      Number(
-                        balance.cash_balance ??
-                          0,
-                      ),
-                    )}{" "}
-                    {balance.currency}
-                  </p>
-                ),
-              )}
-
-              {negativeReportedBalances.map(
-                (balance) => (
-                  <p
-                    key={`negative-reported-${balance.account_id}-${balance.instrument_id}`}
-                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
-                  >
-                    Negative reported balance:{" "}
-                    {getAccountDescription(
-                      balance.owner_name,
-                      balance.provider_name,
-                      balance.account_name,
-                    )}{" "}
-                    ·{" "}
-                    {balance.instrument_name} ·{" "}
-                    {formatAmount(
-                      Number(
-                        balance.reported_balance ??
-                          0,
-                      ),
-                    )}{" "}
-                    {balance.currency}
-                  </p>
-                ),
-              )}
-
-              {valuationIssues.map(
-                (position) => {
-                  const currentQuantity =
-                    Number(
-                      position.quantity ?? 0,
-                    );
-
-                  const snapshotQuantity =
-                    position.valuation_quantity ===
-                    null
-                      ? null
-                      : Number(
-                          position.valuation_quantity,
-                        );
-
-                  return (
-                    <p
-                      key={`valuation-${position.account_id}-${position.instrument_id}`}
-                      className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
-                    >
-                      Valuation quantity issue:{" "}
-                      {getAccountDescription(
-                        position.owner_name,
-                        position.provider_name,
-                        position.account_name,
-                      )}{" "}
-                      ·{" "}
-                      {position.instrument_ticker ||
-                        position.instrument_name}{" "}
-                      · ledger{" "}
-                      {formatQuantity(
-                        currentQuantity,
-                      )}
-                      {" · snapshot "}
-                      {snapshotQuantity === null
-                        ? "missing"
-                        : formatQuantity(
-                            snapshotQuantity,
-                          )}
-                    </p>
-                  );
-                },
-              )}
-            </div>
-          </section>
-        ) : (
-          <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
-            <h2 className="text-lg font-semibold text-emerald-900">
-              No consistency warnings
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-emerald-800">
-              All calculated balances are
-              non-negative and valuation quantities
-              match their current ledger positions.
-            </p>
-          </section>
-        )}
+          <StateSnapshotComparisonChart
+            title="Foreign-market assets"
+            description="Current global ETFs, U.S. REITs and semiconductor holdings compared with the latest frozen monthly quantities."
+            items={
+              foreignSnapshotComparisonItems
+            }
+            baselineDate={
+              latestMonthlyBaselineDate
+            }
+            baseCurrency={
+              workspaceBaseCurrency
+            }
+            groupByAssetClass
+          />
+        </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.8fr)]">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1460,6 +1458,155 @@ export default async function PortfolioStatePage() {
             </div>
           )}
         </section>
+
+        {warningCount > 0 ? (
+          <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6">
+            <h2 className="text-lg font-semibold text-amber-900">
+              Incomplete or inconsistent state
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-amber-800">
+              Negative balances usually mean that
+              an opening balance or an earlier
+              operation is missing. A valuation
+              mismatch means that the latest
+              snapshot quantity differs from the
+              current ledger quantity.
+            </p>
+
+            <div className="mt-4 space-y-2">
+              {negativeUnitPositions.map(
+                (position) => (
+                  <p
+                    key={`negative-units-${position.account_id}-${position.instrument_id}`}
+                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
+                  >
+                    Negative units:{" "}
+                    {getAccountDescription(
+                      position.owner_name,
+                      position.provider_name,
+                      position.account_name,
+                    )}{" "}
+                    ·{" "}
+                    {position.instrument_ticker ||
+                      position.instrument_name}{" "}
+                    ·{" "}
+                    {formatQuantity(
+                      Number(
+                        position.quantity ?? 0,
+                      ),
+                    )}
+                  </p>
+                ),
+              )}
+
+              {negativeCashBalances.map(
+                (balance) => (
+                  <p
+                    key={`negative-cash-${balance.account_id}-${balance.currency}`}
+                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
+                  >
+                    Negative cash:{" "}
+                    {getAccountDescription(
+                      balance.owner_name,
+                      balance.provider_name,
+                      balance.account_name,
+                    )}{" "}
+                    ·{" "}
+                    {formatAmount(
+                      Number(
+                        balance.cash_balance ??
+                          0,
+                      ),
+                    )}{" "}
+                    {balance.currency}
+                  </p>
+                ),
+              )}
+
+              {negativeReportedBalances.map(
+                (balance) => (
+                  <p
+                    key={`negative-reported-${balance.account_id}-${balance.instrument_id}`}
+                    className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
+                  >
+                    Negative reported balance:{" "}
+                    {getAccountDescription(
+                      balance.owner_name,
+                      balance.provider_name,
+                      balance.account_name,
+                    )}{" "}
+                    ·{" "}
+                    {balance.instrument_name} ·{" "}
+                    {formatAmount(
+                      Number(
+                        balance.reported_balance ??
+                          0,
+                      ),
+                    )}{" "}
+                    {balance.currency}
+                  </p>
+                ),
+              )}
+
+              {valuationIssues.map(
+                (position) => {
+                  const currentQuantity =
+                    Number(
+                      position.quantity ?? 0,
+                    );
+
+                  const snapshotQuantity =
+                    position.valuation_quantity ===
+                    null
+                      ? null
+                      : Number(
+                          position.valuation_quantity,
+                        );
+
+                  return (
+                    <p
+                      key={`valuation-${position.account_id}-${position.instrument_id}`}
+                      className="rounded-lg bg-white/70 px-4 py-3 text-sm text-amber-900"
+                    >
+                      Valuation quantity issue:{" "}
+                      {getAccountDescription(
+                        position.owner_name,
+                        position.provider_name,
+                        position.account_name,
+                      )}{" "}
+                      ·{" "}
+                      {position.instrument_ticker ||
+                        position.instrument_name}{" "}
+                      · ledger{" "}
+                      {formatQuantity(
+                        currentQuantity,
+                      )}
+                      {" · snapshot "}
+                      {snapshotQuantity === null
+                        ? "missing"
+                        : formatQuantity(
+                            snapshotQuantity,
+                          )}
+                    </p>
+                  );
+                },
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+            <h2 className="text-lg font-semibold text-emerald-900">
+              No consistency warnings
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-emerald-800">
+              All calculated balances are
+              non-negative and valuation quantities
+              match their current ledger positions.
+            </p>
+          </section>
+        )}
       </div>
     </main>
   );

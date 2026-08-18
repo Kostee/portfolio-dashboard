@@ -84,49 +84,234 @@ function getExchangeOrder(exchange: string | null): number {
   }
 }
 
-type PreviousOpenInfo = {
+type ReferenceOpenInfo = {
   tradingDate: string;
   openPrice: number;
 };
 
-async function loadPreviousOpenPrices(
+function shiftIsoDate(
+  value: string,
+  days: number,
+): string {
+  const date = new Date(
+    `${value}T00:00:00Z`,
+  );
+
+  date.setUTCDate(
+    date.getUTCDate() + days,
+  );
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
+function shiftIsoMonths(
+  value: string,
+  months: number,
+): string {
+  const [
+    year,
+    month,
+    day,
+  ] = value
+    .split("-")
+    .map(Number);
+
+  const targetMonthIndex =
+    month - 1 + months;
+
+  const targetYear =
+    year +
+    Math.floor(
+      targetMonthIndex / 12,
+    );
+
+  const normalizedMonthIndex =
+    (
+      (
+        targetMonthIndex %
+        12
+      ) +
+      12
+    ) %
+    12;
+
+  const lastDay =
+    new Date(
+      Date.UTC(
+        targetYear,
+        normalizedMonthIndex + 1,
+        0,
+      ),
+    ).getUTCDate();
+
+  return new Date(
+    Date.UTC(
+      targetYear,
+      normalizedMonthIndex,
+      Math.min(day, lastDay),
+    ),
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+async function loadReferenceOpenPrices(
   supabase: Awaited<ReturnType<typeof createClient>>,
   workspaceId: string,
   instrumentIds: string[],
-  selectedDate: string | null,
-): Promise<Map<string, PreviousOpenInfo>> {
-  const previousByInstrument = new Map<string, PreviousOpenInfo>();
+  targetDate: string | null,
+  lookbackDays: number,
+): Promise<Map<string, ReferenceOpenInfo>> {
+  const referenceByInstrument =
+    new Map<string, ReferenceOpenInfo>();
 
-  if (!selectedDate || instrumentIds.length === 0) {
-    return previousByInstrument;
+  if (
+    !targetDate ||
+    instrumentIds.length === 0
+  ) {
+    return referenceByInstrument;
   }
 
-  const { data, error } = await supabase
-    .from("instrument_daily_open_prices")
-    .select("instrument_id, trading_date, open_price")
-    .eq("workspace_id", workspaceId)
-    .in("instrument_id", instrumentIds)
-    .lt("trading_date", selectedDate)
-    .order("trading_date", { ascending: false })
-    .limit(1000);
+  const earliestDate =
+    shiftIsoDate(
+      targetDate,
+      -lookbackDays,
+    );
+
+  const { data, error } =
+    await supabase
+      .from(
+        "instrument_daily_open_prices",
+      )
+      .select(
+        "instrument_id, trading_date, open_price",
+      )
+      .eq(
+        "workspace_id",
+        workspaceId,
+      )
+      .in(
+        "instrument_id",
+        instrumentIds,
+      )
+      .gte(
+        "trading_date",
+        earliestDate,
+      )
+      .lte(
+        "trading_date",
+        targetDate,
+      )
+      .order(
+        "trading_date",
+        {
+          ascending: false,
+        },
+      )
+      .limit(1000);
 
   if (error) {
-    console.error("Previous daily open query failed:", error);
-    return previousByInstrument;
+    console.error(
+      "Reference daily open query failed:",
+      error,
+    );
+
+    return referenceByInstrument;
   }
 
   for (const row of data ?? []) {
-    if (previousByInstrument.has(row.instrument_id)) {
+    if (
+      referenceByInstrument.has(
+        row.instrument_id,
+      )
+    ) {
       continue;
     }
 
-    previousByInstrument.set(row.instrument_id, {
-      tradingDate: row.trading_date,
-      openPrice: Number(row.open_price),
-    });
+    referenceByInstrument.set(
+      row.instrument_id,
+      {
+        tradingDate:
+          row.trading_date,
+        openPrice:
+          Number(
+            row.open_price,
+          ),
+      },
+    );
   }
 
-  return previousByInstrument;
+  return referenceByInstrument;
+}
+
+function OpenChangeCell({
+  currentOpen,
+  reference,
+  threshold,
+}: {
+  currentOpen: number;
+  reference:
+    ReferenceOpenInfo | undefined;
+  threshold: number;
+}) {
+  const changePercent =
+    reference &&
+    reference.openPrice > 0
+      ? (
+          (
+            currentOpen /
+            reference.openPrice
+          ) -
+          1
+        ) *
+        100
+      : null;
+
+  if (changePercent === null) {
+    return (
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        <span className="text-sm font-medium text-slate-400">
+          —
+        </span>
+
+        <p className="mt-1 text-[11px] text-slate-400">
+          No data yet
+        </p>
+      </td>
+    );
+  }
+
+  const isStrongMove =
+    Math.abs(
+      changePercent,
+    ) >= threshold;
+
+  const badgeClass =
+    changePercent > 0
+      ? isStrongMove
+        ? "inline-flex rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm ring-2 ring-emerald-200"
+        : "inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+      : changePercent < 0
+        ? isStrongMove
+          ? "inline-flex rounded-full bg-red-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm ring-2 ring-red-200"
+          : "inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"
+        : "inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600";
+
+  return (
+    <td className="whitespace-nowrap px-4 py-3 text-right">
+      <span className={badgeClass}>
+        {formatPercent(
+          changePercent,
+        )}
+      </span>
+
+      <p className="mt-1 text-[11px] text-slate-400">
+        vs {reference?.tradingDate}
+      </p>
+    </td>
+  );
 }
 
 async function loadAllOpenHistory(
@@ -255,12 +440,73 @@ export default async function DailyOpensPage({
 
   let instruments: Instrument[] = [];
 
-  const previousOpenByInstrument = await loadPreviousOpenPrices(
-    supabase,
-    membership.workspace_id,
-    instrumentIds,
-    selectedDate,
-  );
+  const previousTargetDate =
+    selectedDate
+      ? shiftIsoDate(
+          selectedDate,
+          -1,
+        )
+      : null;
+
+  const weekTargetDate =
+    selectedDate
+      ? shiftIsoDate(
+          selectedDate,
+          -7,
+        )
+      : null;
+
+  const monthTargetDate =
+    selectedDate
+      ? shiftIsoMonths(
+          selectedDate,
+          -1,
+        )
+      : null;
+
+  const sixMonthTargetDate =
+    selectedDate
+      ? shiftIsoMonths(
+          selectedDate,
+          -6,
+        )
+      : null;
+
+  const [
+    previousOpenByInstrument,
+    weekOpenByInstrument,
+    monthOpenByInstrument,
+    sixMonthOpenByInstrument,
+  ] = await Promise.all([
+    loadReferenceOpenPrices(
+      supabase,
+      membership.workspace_id,
+      instrumentIds,
+      previousTargetDate,
+      10,
+    ),
+    loadReferenceOpenPrices(
+      supabase,
+      membership.workspace_id,
+      instrumentIds,
+      weekTargetDate,
+      7,
+    ),
+    loadReferenceOpenPrices(
+      supabase,
+      membership.workspace_id,
+      instrumentIds,
+      monthTargetDate,
+      7,
+    ),
+    loadReferenceOpenPrices(
+      supabase,
+      membership.workspace_id,
+      instrumentIds,
+      sixMonthTargetDate,
+      7,
+    ),
+  ]);
 
   if (instrumentIds.length > 0) {
     const { data, error } = await supabase
@@ -582,6 +828,18 @@ export default async function DailyOpensPage({
                               Vs prev. open
                             </th>
 
+                            <th className="px-4 py-3 text-right font-medium">
+                              1 week
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              1 month
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              6 months
+                            </th>
+
                             <th className="px-4 py-3 font-medium">
                               Provider
                             </th>
@@ -614,17 +872,30 @@ export default async function DailyOpensPage({
                                 price.instrument_id,
                               )}`;
 
-                            const previousOpen = previousOpenByInstrument.get(
-                              price.instrument_id,
-                            );
+                            const previousOpen =
+                              previousOpenByInstrument.get(
+                                price.instrument_id,
+                              );
 
-                            const currentOpen = Number(price.open_price);
+                            const weekOpen =
+                              weekOpenByInstrument.get(
+                                price.instrument_id,
+                              );
 
-                            const openChangePercent =
-                              previousOpen && previousOpen.openPrice > 0
-                                ? ((currentOpen / previousOpen.openPrice) - 1) *
-                                  100
-                                : null;
+                            const monthOpen =
+                              monthOpenByInstrument.get(
+                                price.instrument_id,
+                              );
+
+                            const sixMonthOpen =
+                              sixMonthOpenByInstrument.get(
+                                price.instrument_id,
+                              );
+
+                            const currentOpen =
+                              Number(
+                                price.open_price,
+                              );
 
                             return (
                               <tr key={price.id}>
@@ -642,37 +913,29 @@ export default async function DailyOpensPage({
                                   {formatPrice(currentOpen)} {price.currency}
                                 </td>
 
-                                <td className="whitespace-nowrap px-4 py-3 text-right">
-                                  {openChangePercent === null ? (
-                                    <div>
-                                      <span className="text-sm font-medium text-slate-400">
-                                        —
-                                      </span>
+                                <OpenChangeCell
+                                  currentOpen={currentOpen}
+                                  reference={previousOpen}
+                                  threshold={5}
+                                />
 
-                                      <p className="mt-1 text-[11px] text-slate-400">
-                                        first observation
-                                      </p>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <span
-                                        className={
-                                          openChangePercent > 0
-                                            ? "inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
-                                            : openChangePercent < 0
-                                              ? "inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"
-                                              : "inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"
-                                        }
-                                      >
-                                        {formatPercent(openChangePercent)}
-                                      </span>
+                                <OpenChangeCell
+                                  currentOpen={currentOpen}
+                                  reference={weekOpen}
+                                  threshold={10}
+                                />
 
-                                      <p className="mt-1 text-[11px] text-slate-400">
-                                        vs {previousOpen?.tradingDate}
-                                      </p>
-                                    </div>
-                                  )}
-                                </td>
+                                <OpenChangeCell
+                                  currentOpen={currentOpen}
+                                  reference={monthOpen}
+                                  threshold={15}
+                                />
+
+                                <OpenChangeCell
+                                  currentOpen={currentOpen}
+                                  reference={sixMonthOpen}
+                                  threshold={20}
+                                />
 
                                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                                   {price.provider} · {price.provider_symbol}

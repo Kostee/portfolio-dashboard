@@ -12,6 +12,10 @@ import type {
 import {
   exportSvgAsPng,
 } from "@/lib/charts/export-svg-as-png";
+import {
+  buildOwnerPaletteIndex,
+  getOwnerGradientColor,
+} from "@/lib/reports/owner-color-palette";
 
 type GpwPortfolioChartProps = {
   items: InstrumentChartItem[];
@@ -110,44 +114,6 @@ function calculateAxisMaximum(
   return niceFraction * magnitude;
 }
 
-function getOwnerHue(
-  ownerKey: string,
-): number {
-  let hash = 0;
-
-  for (const character of ownerKey) {
-    hash =
-      (
-        hash * 31 +
-        character.charCodeAt(0)
-      ) >>> 0;
-  }
-
-  return hash % 360;
-}
-
-function getOwnerColor(
-  ownerKey: string,
-  itemIndex: number,
-  itemCount: number,
-): string {
-  const hue =
-    getOwnerHue(ownerKey);
-
-  const progress =
-    itemCount <= 1
-      ? 0
-      : itemIndex /
-        (itemCount - 1);
-
-  const lightness =
-    Math.round(
-      36 +
-      progress * 34,
-    );
-
-  return `hsl(${hue} 60% ${lightness}%)`;
-}
 export function GpwPortfolioChart({
   items,
   totalValueBase,
@@ -219,6 +185,16 @@ export function GpwPortfolioChart({
           axisMaximum *
           index
         ) / tickCount,
+    );
+
+  const ownerPaletteIndex =
+    buildOwnerPaletteIndex(
+      items.flatMap((item) =>
+        item.ownerBreakdown.map((owner) => ({
+          ownerId: owner.ownerId,
+          ownerName: owner.ownerName,
+        })),
+      ),
     );
 
   async function handleDownload() {
@@ -338,7 +314,7 @@ export function GpwPortfolioChart({
             fontSize={17}
             fill="#64748b"
           >
-            Each owner receives a deterministic color gradient
+            Owner 1 uses blue shades · owner 2 uses green shades
           </text>
 
           {ticks.map(
@@ -496,10 +472,14 @@ export function GpwPortfolioChart({
                         segmentWidth;
 
                       const ownerColor =
-                        getOwnerColor(
-                           owner.ownerId,
-                          index,
-                          items.length,
+                        getOwnerGradientColor(
+                          ownerPaletteIndex.get(
+                            owner.ownerId,
+                          ) ?? 99,
+                          items.length <= 1
+                            ? 0
+                            : index /
+                              (items.length - 1),
                         );
 
                       const titleText =

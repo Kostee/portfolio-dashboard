@@ -12,6 +12,10 @@ import type {
 import {
   exportSvgAsPng,
 } from "@/lib/charts/export-svg-as-png";
+import {
+  buildOwnerPaletteIndex,
+  getOwnerGradientColor,
+} from "@/lib/reports/owner-color-palette";
 
 type AssetsByAccountChartProps = {
   items: AccountChartItem[];
@@ -94,24 +98,9 @@ function calculateAxisMaximum(
   return niceFraction * magnitude;
 }
 
-function getOwnerHue(
-  ownerKey: string,
-): number {
-  let hash = 0;
-
-  for (const character of ownerKey) {
-    hash =
-      (
-        hash * 31 +
-        character.charCodeAt(0)
-      ) >>> 0;
-  }
-
-  return hash % 360;
-}
-
 function getAccountColor(
   item: AccountChartItem,
+  ownerPaletteIndex: number,
 ): string {
   const accountType =
     item.accountType.toLowerCase();
@@ -134,28 +123,28 @@ function getAccountColor(
     return "#F2A900";
   }
 
-  const hue =
-    getOwnerHue(item.ownerId);
-
-  let lightness = 54;
+  let gradientProgress = 0.52;
 
   if (accountType.includes("ike")) {
-    lightness = 38;
+    gradientProgress = 0;
   } else if (
     accountType.includes("ikze")
   ) {
-    lightness = 48;
+    gradientProgress = 0.34;
   } else if (
     accountType.includes("broker")
   ) {
-    lightness = 58;
+    gradientProgress = 0.62;
   } else if (
     accountType.includes("ppk")
   ) {
-    lightness = 68;
+    gradientProgress = 0.9;
   }
 
-  return `hsl(${hue} 58% ${lightness}%)`;
+  return getOwnerGradientColor(
+    ownerPaletteIndex,
+    gradientProgress,
+  );
 }
 
 function getAccountSortOrder(
@@ -223,6 +212,14 @@ export function AssetsByAccountChart({
   ] = useState<
     string | null
   >(null);
+
+  const ownerPaletteIndex =
+    buildOwnerPaletteIndex(
+      items.map((item) => ({
+        ownerId: item.ownerId,
+        ownerName: item.ownerName,
+      })),
+    );
 
   const orderedItems =
     [...items].sort(
@@ -473,7 +470,12 @@ export function AssetsByAccountChart({
                     height={Math.max(2, height)}
                     rx={3}
                     fill={
-                      getAccountColor(item)
+                      getAccountColor(
+                        item,
+                        ownerPaletteIndex.get(
+                          item.ownerId,
+                        ) ?? 99,
+                      )
                     }
                   />
 

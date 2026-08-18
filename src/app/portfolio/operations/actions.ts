@@ -67,13 +67,13 @@ export async function createCashOperation(
 
   if (!accountId) {
     redirect(
-      "/portfolio/operations?error=account_required",
+      "/portfolio/operations/cash?error=account_required",
     );
   }
 
   if (!isValidIsoDate(operationDate)) {
     redirect(
-      "/portfolio/operations?error=date_required",
+      "/portfolio/operations/cash?error=date_required",
     );
   }
 
@@ -82,25 +82,25 @@ export async function createCashOperation(
     !isValidOperationTime(operationTime)
   ) {
     redirect(
-      "/portfolio/operations?error=time_invalid",
+      "/portfolio/operations/cash?error=time_invalid",
     );
   }
 
   if (!isCashOperationType(operationType)) {
     redirect(
-      "/portfolio/operations?error=type_required",
+      "/portfolio/operations/cash?error=type_required",
     );
   }
 
   if (amount === null) {
     redirect(
-      "/portfolio/operations?error=amount_required",
+      "/portfolio/operations/cash?error=amount_required",
     );
   }
 
   if (!isOperationCurrency(currency)) {
     redirect(
-      "/portfolio/operations?error=currency_required",
+      "/portfolio/operations/cash?error=currency_required",
     );
   }
 
@@ -119,7 +119,7 @@ export async function createCashOperation(
     );
 
     redirect(
-      "/portfolio/operations?error=workspace_not_found",
+      "/portfolio/operations/cash?error=workspace_not_found",
     );
   }
 
@@ -128,7 +128,7 @@ export async function createCashOperation(
     membership.role !== "editor"
   ) {
     redirect(
-      "/portfolio/operations?error=forbidden",
+      "/portfolio/operations/cash?error=forbidden",
     );
   }
 
@@ -151,7 +151,7 @@ export async function createCashOperation(
     );
 
     redirect(
-      "/portfolio/operations?error=invalid_account",
+      "/portfolio/operations/cash?error=invalid_account",
     );
   }
 
@@ -177,14 +177,16 @@ export async function createCashOperation(
     );
 
     redirect(
-      "/portfolio/operations?error=creation_failed",
+      "/portfolio/operations/cash?error=creation_failed",
     );
   }
 
   revalidatePath("/portfolio/operations");
+  revalidatePath("/portfolio/operations/cash");
+  revalidatePath("/portfolio/state");
   revalidatePath("/portfolio");
 
   redirect(
-    "/portfolio/operations?success=operation_added",
+    "/portfolio/operations/cash?success=operation_added",
   );
 }

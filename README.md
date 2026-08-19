@@ -197,11 +197,11 @@ Detailed internal documentation is available under `docs/`.
 
 Useful starting points:
 
-- `docs/DATA_MODEL.md` â€” portfolio database model,
-- `docs/REPORT_RULES.md` â€” reporting and calculation rules,
-- `docs/CHART_STYLE.md` â€” visualization rules,
-- `docs/WEEKLY_MARKET_DATA_SETUP.md` â€” weekly market-data workflow,
-- `docs/PROVIDER_NOTES.md` â€” provider responsibilities.
+- `docs/DATA_MODEL.md` — portfolio database model,
+- `docs/REPORT_RULES.md` — reporting and calculation rules,
+- `docs/CHART_STYLE.md` — visualization rules,
+- `docs/WEEKLY_MARKET_DATA_SETUP.md` — weekly market-data workflow,
+- `docs/PROVIDER_NOTES.md` — provider responsibilities.
 
 ## Privacy model
 

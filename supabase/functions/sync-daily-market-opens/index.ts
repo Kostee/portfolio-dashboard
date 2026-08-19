@@ -1,5 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+import {
+  isDailyOpenBackfillWindow,
+  runDailyOpenBackfill,
+} from "../_shared/daily-open-backfill.ts";
+
 type MarketRegion = "europe" | "us";
 type TriggerSource = "cron" | "manual";
 
@@ -8,6 +13,7 @@ type RequestBody = {
   trigger?: TriggerSource;
   force?: boolean;
   dryRun?: boolean;
+  backfill?: boolean;
 };
 
 type InstrumentRow = {
@@ -1292,13 +1298,36 @@ Deno.serve(
     const now =
       new Date();
 
+    const regularCronWindow =
+      isCronWindow(
+        region,
+        now,
+      );
+
+    const backfillCronWindow =
+      isDailyOpenBackfillWindow(
+        region,
+        now,
+      );
+
+    const backfillOnly =
+      trigger === "cron" &&
+      !force &&
+      !regularCronWindow &&
+      backfillCronWindow;
+
+    const shouldRunBackfill =
+      body.backfill === true ||
+      (
+        trigger === "cron" &&
+        backfillCronWindow
+      );
+
     if (
       trigger === "cron" &&
       !force &&
-      !isCronWindow(
-        region,
-        now,
-      )
+      !regularCronWindow &&
+      !backfillCronWindow
     ) {
       return jsonResponse({
         status:
@@ -1547,6 +1576,100 @@ Deno.serve(
       Deno.env.get(
         "TWELVE_DATA_API_KEY",
       ) ?? undefined;
+
+    const runBackfillForWorkspaces =
+      async () => {
+        const backfillSummaries:
+          Array<
+            Record<
+              string,
+              unknown
+            >
+          > = [];
+
+        for (
+          const workspaceId of
+          workspaceIds
+        ) {
+          const workspaceInstruments =
+            instruments.filter(
+              (instrument) =>
+                instrument.workspace_id ===
+                workspaceId,
+            );
+
+          const workspaceSources =
+            sources.filter(
+              (source) =>
+                source.workspace_id ===
+                workspaceId,
+            );
+
+          try {
+            backfillSummaries.push(
+              await runDailyOpenBackfill({
+                supabase,
+                workspaceId,
+                region,
+                asOfDate:
+                  targetDate,
+                instruments:
+                  workspaceInstruments,
+                sources:
+                  workspaceSources,
+                eodhdApiKey,
+                twelveDataApiKey,
+              }),
+            );
+          } catch (
+            backfillError
+          ) {
+            console.error(
+              "Daily-open historical backfill failed:",
+              workspaceId,
+              backfillError,
+            );
+
+            backfillSummaries.push({
+              workspaceId,
+              region,
+              status:
+                "failed",
+              error:
+                backfillError instanceof Error
+                  ? backfillError.message
+                  : String(
+                      backfillError,
+                    ),
+            });
+          }
+        }
+
+        return backfillSummaries;
+      };
+
+    if (
+      backfillOnly
+    ) {
+      const backfillSummaries =
+        dryRun
+          ? []
+          : await runBackfillForWorkspaces();
+
+      return jsonResponse({
+        status:
+          dryRun
+            ? "backfill_only_dry_run"
+            : "backfill_only",
+        region,
+        targetDate,
+        trigger,
+        dryRun,
+        force,
+        backfill:
+          backfillSummaries,
+      });
+    }
 
     const summaries:
       Array<
@@ -1830,6 +1953,8 @@ Deno.serve(
                 {
                   onConflict:
                     "workspace_id,instrument_id,trading_date",
+                  ignoreDuplicates:
+                    true,
                 },
               );
 
@@ -2089,6 +2214,12 @@ Deno.serve(
 
     }
 
+    const backfillSummaries =
+      !dryRun &&
+      shouldRunBackfill
+        ? await runBackfillForWorkspaces()
+        : [];
+
     return jsonResponse({
       status: "ok",
       region,
@@ -2097,6 +2228,8 @@ Deno.serve(
       dryRun,
       force,
       summaries,
+      backfill:
+        backfillSummaries,
     });
   },
 );

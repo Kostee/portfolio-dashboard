@@ -14,6 +14,7 @@ export type StateComparisonCurrentInstrument = {
   assetClassSortOrder: number;
   quantity: number;
   estimatedBaseValue: number | null;
+  comparisonUnitBaseValue: number | null;
 };
 
 export type StateComparisonBaselineItem = {
@@ -148,10 +149,13 @@ export function buildStateSnapshotComparison({
       currentItem?.estimatedBaseValue ?? null;
 
     const currentUnitBaseValue =
-      currentEstimatedBaseValue !== null &&
-      currentQuantity > 0
-        ? currentEstimatedBaseValue / currentQuantity
-        : null;
+      currentItem?.comparisonUnitBaseValue ??
+      (
+        currentEstimatedBaseValue !== null &&
+        currentQuantity > 0
+          ? currentEstimatedBaseValue / currentQuantity
+          : null
+      );
 
     const comparisonUsesCurrentUnitValue =
       currentUnitBaseValue !== null;

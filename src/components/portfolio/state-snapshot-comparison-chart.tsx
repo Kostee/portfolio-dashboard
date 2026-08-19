@@ -88,7 +88,7 @@ function ComparisonRow({
         : "text-slate-500";
 
   return (
-    <div className="border-b border-slate-100 py-4 last:border-b-0">
+    <div className="border-b border-slate-100 py-3 last:border-b-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -146,7 +146,7 @@ function ComparisonRow({
         </div>
       </div>
 
-      <div className="relative mt-3 h-8 overflow-hidden rounded-lg bg-slate-100">
+      <div className="relative mt-2 h-6 overflow-hidden rounded-md bg-slate-100">
         {retainedWidth > 0 && (
           <div
             className="absolute inset-y-0 left-0"
@@ -234,7 +234,7 @@ export function StateSnapshotComparisonChart({
 }: StateSnapshotComparisonChartProps) {
   if (!baselineDate) {
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-semibold">
           {title}
         </h2>
@@ -320,8 +320,8 @@ export function StateSnapshotComparisonChart({
       ];
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-xl font-semibold">
             {title}
@@ -337,7 +337,7 @@ export function StateSnapshotComparisonChart({
         </span>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500">
         <span className="inline-flex items-center gap-2">
           <span className="h-2.5 w-7 rounded bg-slate-500" />
           retained
@@ -366,14 +366,14 @@ export function StateSnapshotComparisonChart({
       </div>
 
       {items.length > 0 ? (
-        <div className="mt-5">
+        <div className="mt-4">
           {groups.map((group) => (
             <div
               key={
                 group.name ||
                 "all-instruments"
               }
-              className="[&+&]:mt-7"
+              className="[&+&]:mt-5"
             >
               {groupByAssetClass && (
                 <div className="mb-1 flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -414,7 +414,7 @@ export function StateSnapshotComparisonChart({
         </div>
       )}
 
-      <p className="mt-5 border-t border-slate-100 pt-4 text-[11px] leading-5 text-slate-500">
+      <p className="mt-4 border-t border-slate-100 pt-3 text-[11px] leading-5 text-slate-500">
         The comparison isolates holding changes:
         when a current unit value is available,
         the frozen monthly quantity is repriced at

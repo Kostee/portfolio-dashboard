@@ -2,11 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { StateSnapshotComparisonChart } from "@/components/portfolio/state-snapshot-comparison-chart";
+import { fetchNbpTableARate } from "@/lib/finance/nbp-table-a";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildStateSnapshotComparison,
   STATE_FOREIGN_ASSET_CLASS_CODES,
   type StateComparisonBaselineItem,
+  type StateComparisonCurrentInstrument,
 } from "@/lib/portfolio/state-snapshot-comparison";
 import type { Database } from "@/types/database.types";
 
@@ -18,6 +20,362 @@ type CashBalance =
 
 type ReportedBalance =
   Database["public"]["Views"]["portfolio_current_reported_balances"]["Row"];
+
+type DailyOpenPriceRow = Pick<
+  Database["public"]["Tables"]["instrument_daily_open_prices"]["Row"],
+  "instrument_id" | "trading_date" | "open_price" | "currency"
+>;
+
+type LatestOpenBaseValue = {
+  tradingDate: string;
+  openPrice: number;
+  currency: string;
+  unitValueBase: number;
+};
+
+async function loadLatestOpenBaseValues(
+  supabase: Awaited<
+    ReturnType<typeof createClient>
+  >,
+  workspaceId: string,
+  instrumentIds: string[],
+  workspaceBaseCurrency: string,
+): Promise<
+  Map<
+    string,
+    LatestOpenBaseValue
+  >
+> {
+  const result =
+    new Map<
+      string,
+      LatestOpenBaseValue
+    >();
+
+  const uniqueInstrumentIds =
+    [
+      ...new Set(
+        instrumentIds,
+      ),
+    ];
+
+  if (
+    uniqueInstrumentIds.length ===
+    0
+  ) {
+    return result;
+  }
+
+  const rowLimit =
+    Math.max(
+      1000,
+      uniqueInstrumentIds.length *
+        40,
+    );
+
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        "instrument_daily_open_prices",
+      )
+      .select(
+        "instrument_id, trading_date, open_price, currency",
+      )
+      .eq(
+        "workspace_id",
+        workspaceId,
+      )
+      .in(
+        "instrument_id",
+        uniqueInstrumentIds,
+      )
+      .order(
+        "trading_date",
+        {
+          ascending: false,
+        },
+      )
+      .limit(
+        rowLimit,
+      );
+
+  if (error) {
+    console.error(
+      "Latest daily open query failed:",
+      error,
+    );
+
+    return result;
+  }
+
+  const latestRawByInstrument =
+    new Map<
+      string,
+      DailyOpenPriceRow
+    >();
+
+  for (
+    const row of
+    (data ??
+      []) as DailyOpenPriceRow[]
+  ) {
+    if (
+      !latestRawByInstrument.has(
+        row.instrument_id,
+      )
+    ) {
+      latestRawByInstrument.set(
+        row.instrument_id,
+        row,
+      );
+    }
+  }
+
+  const fxCache =
+    new Map<
+      string,
+      Promise<number | null>
+    >();
+
+  async function resolveRateToBase(
+    currency: string,
+    tradingDate: string,
+  ): Promise<number | null> {
+    const normalizedCurrency =
+      currency.toUpperCase();
+
+    if (
+      normalizedCurrency ===
+      workspaceBaseCurrency.toUpperCase()
+    ) {
+      return 1;
+    }
+
+    const cacheKey =
+      `${normalizedCurrency}|${tradingDate}`;
+
+    let promise =
+      fxCache.get(
+        cacheKey,
+      );
+
+    if (!promise) {
+      promise =
+        fetchNbpTableARate(
+          normalizedCurrency,
+          tradingDate,
+          workspaceBaseCurrency,
+        )
+          .then(
+            (rate) =>
+              rate.rateToBase,
+          )
+          .catch(
+            (rateError) => {
+              console.error(
+                `Latest-open FX lookup failed for ${cacheKey}:`,
+                rateError,
+              );
+
+              return null;
+            },
+          );
+
+      fxCache.set(
+        cacheKey,
+        promise,
+      );
+    }
+
+    return await promise;
+  }
+
+  for (
+    const [
+      instrumentId,
+      row,
+    ] of
+    latestRawByInstrument
+  ) {
+    const openPrice =
+      Number(
+        row.open_price,
+      );
+
+    if (
+      !Number.isFinite(
+        openPrice,
+      ) ||
+      openPrice <= 0
+    ) {
+      continue;
+    }
+
+    const rateToBase =
+      await resolveRateToBase(
+        row.currency,
+        row.trading_date,
+      );
+
+    if (
+      rateToBase === null ||
+      !Number.isFinite(
+        rateToBase,
+      ) ||
+      rateToBase <= 0
+    ) {
+      continue;
+    }
+
+    result.set(
+      instrumentId,
+      {
+        tradingDate:
+          row.trading_date,
+        openPrice,
+        currency:
+          row.currency,
+        unitValueBase:
+          openPrice *
+          rateToBase,
+      },
+    );
+  }
+
+  return result;
+}
+
+function buildComparisonCurrentItems(
+  currentInstruments:
+    InstrumentPositionGroup[],
+  baseline:
+    StateComparisonBaselineItem[],
+  latestOpenBaseValues:
+    Map<
+      string,
+      LatestOpenBaseValue
+    >,
+): StateComparisonCurrentInstrument[] {
+  const currentByInstrument =
+    new Map<
+      string,
+      StateComparisonCurrentInstrument
+    >();
+
+  for (
+    const instrument of
+    currentInstruments
+  ) {
+    const latestOpen =
+      latestOpenBaseValues.get(
+        instrument.instrumentId,
+      );
+
+    const fallbackUnitBaseValue =
+      instrument.totalEstimatedBaseValue !==
+        null &&
+      instrument.totalQuantity > 0
+        ? (
+            instrument.totalEstimatedBaseValue /
+            instrument.totalQuantity
+          )
+        : null;
+
+    const comparisonUnitBaseValue =
+      latestOpen?.unitValueBase ??
+      fallbackUnitBaseValue;
+
+    currentByInstrument.set(
+      instrument.instrumentId,
+      {
+        instrumentId:
+          instrument.instrumentId,
+        instrumentName:
+          instrument.instrumentName,
+        instrumentTicker:
+          instrument.instrumentTicker,
+        assetClassName:
+          instrument.assetClassName,
+        assetClassCode:
+          instrument.assetClassCode,
+        assetClassColor:
+          instrument.assetClassColor,
+        assetClassSortOrder:
+          instrument.assetClassSortOrder,
+        quantity:
+          instrument.totalQuantity,
+        estimatedBaseValue:
+          comparisonUnitBaseValue !==
+          null
+            ? (
+                instrument.totalQuantity *
+                comparisonUnitBaseValue
+              )
+            : instrument.totalEstimatedBaseValue,
+        comparisonUnitBaseValue,
+      },
+    );
+  }
+
+  for (
+    const item of
+    baseline
+  ) {
+    if (
+      !item.instrument_id ||
+      currentByInstrument.has(
+        item.instrument_id,
+      )
+    ) {
+      continue;
+    }
+
+    const latestOpen =
+      latestOpenBaseValues.get(
+        item.instrument_id,
+      );
+
+    currentByInstrument.set(
+      item.instrument_id,
+      {
+        instrumentId:
+          item.instrument_id,
+        instrumentName:
+          item.instrument_name ??
+          "Unknown instrument",
+        instrumentTicker:
+          item.instrument_ticker,
+        assetClassName:
+          item.asset_class_name ??
+          "Unclassified",
+        assetClassCode:
+          item.asset_class_code,
+        assetClassColor:
+          item.asset_class_color ??
+          FALLBACK_ASSET_CLASS_COLOR,
+        assetClassSortOrder:
+          item.asset_class_sort_order ??
+          999,
+        quantity:
+          0,
+        estimatedBaseValue:
+          latestOpen
+            ? 0
+            : null,
+        comparisonUnitBaseValue:
+          latestOpen?.unitValueBase ??
+          null,
+      },
+    );
+  }
+
+  return [
+    ...currentByInstrument.values(),
+  ];
+}
 
 function formatQuantity(value: number): string {
   return new Intl.NumberFormat("en-GB", {
@@ -684,31 +1042,48 @@ export default async function PortfolioStatePage() {
         assetClass.instruments,
     );
 
+  const comparisonInstrumentIds =
+    [
+      ...new Set([
+        ...instrumentPositionGroups.map(
+          (instrument) =>
+            instrument.instrumentId,
+        ),
+        ...latestMonthlyReportItems
+          .map(
+            (item) =>
+              item.instrument_id,
+          )
+          .filter(
+            (
+              instrumentId,
+            ): instrumentId is string =>
+              Boolean(
+                instrumentId,
+              ),
+          ),
+      ]),
+    ];
+
+  const latestOpenBaseValues =
+    await loadLatestOpenBaseValues(
+      supabase,
+      membership.workspace_id,
+      comparisonInstrumentIds,
+      workspaceBaseCurrency,
+    );
+
+  const snapshotComparisonCurrentItems =
+    buildComparisonCurrentItems(
+      instrumentPositionGroups,
+      latestMonthlyReportItems,
+      latestOpenBaseValues,
+    );
+
   const snapshotComparisonItems =
     buildStateSnapshotComparison({
       current:
-        instrumentPositionGroups.map(
-          (instrument) => ({
-            instrumentId:
-              instrument.instrumentId,
-            instrumentName:
-              instrument.instrumentName,
-            instrumentTicker:
-              instrument.instrumentTicker,
-            assetClassName:
-              instrument.assetClassName,
-            assetClassCode:
-              instrument.assetClassCode,
-            assetClassColor:
-              instrument.assetClassColor,
-            assetClassSortOrder:
-              instrument.assetClassSortOrder,
-            quantity:
-              instrument.totalQuantity,
-            estimatedBaseValue:
-              instrument.totalEstimatedBaseValue,
-          }),
-        ),
+        snapshotComparisonCurrentItems,
       baseline:
         latestMonthlyReportItems,
     });
@@ -903,7 +1278,7 @@ export default async function PortfolioStatePage() {
         <div className="mt-6 grid gap-6">
           <StateSnapshotComparisonChart
             title="GPW portfolio structure"
-            description="Current Polish-stock holdings compared with the latest frozen monthly quantities."
+            description="Current Polish-stock holdings, priced from the latest stored market opens, compared with the latest frozen monthly quantities."
             items={
               gpwSnapshotComparisonItems
             }
@@ -917,7 +1292,7 @@ export default async function PortfolioStatePage() {
 
           <StateSnapshotComparisonChart
             title="Foreign-market assets"
-            description="Current global ETFs, U.S. REITs and semiconductor holdings compared with the latest frozen monthly quantities."
+            description="Current global ETFs, U.S. REITs and semiconductor holdings, priced from the latest stored market opens, compared with the latest frozen monthly quantities."
             items={
               foreignSnapshotComparisonItems
             }

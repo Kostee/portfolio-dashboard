@@ -1320,7 +1320,10 @@ Deno.serve(
       body.backfill === true ||
       (
         trigger === "cron" &&
-        backfillCronWindow
+        (
+          regularCronWindow ||
+          backfillCronWindow
+        )
       );
 
     if (

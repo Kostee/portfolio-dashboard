@@ -836,7 +836,7 @@ export default async function DailyOpensPage({
                               1 month
                             </th>
 
-                            <th className="px-4 py-3 text-right font-medium">
+                            <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
                               6 months
                             </th>
 
@@ -870,7 +870,7 @@ export default async function DailyOpensPage({
                                 selectedDate ?? price.trading_date,
                               )}&instrument=${encodeURIComponent(
                                 price.instrument_id,
-                              )}`;
+                              )}#opening-price-history`;
 
                             const previousOpen =
                               previousOpenByInstrument.get(
@@ -977,7 +977,10 @@ export default async function DailyOpensPage({
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section
+          id="opening-price-history"
+          className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
           <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
             Permanent history
           </p>
@@ -987,8 +990,9 @@ export default async function DailyOpensPage({
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            The line chart uses every stored daily opening price for the
-            selected instrument, from the first collected trading day onward.
+            Choose the last month, six months, or year-to-date view. The chart
+            uses permanently stored daily opening prices for the selected
+            instrument.
           </p>
 
           <div className="mt-6">

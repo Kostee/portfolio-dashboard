@@ -180,67 +180,6 @@ function shiftIsoDate(
     );
 }
 
-function shiftIsoMonths(
-  value: string,
-  months: number,
-): string {
-  const [
-    year,
-    month,
-    day,
-  ] =
-    value
-      .split("-")
-      .map(Number);
-
-  const targetMonthIndex =
-    month - 1 +
-    months;
-
-  const targetYear =
-    year +
-    Math.floor(
-      targetMonthIndex /
-        12,
-    );
-
-  const normalizedMonthIndex =
-    (
-      (
-        targetMonthIndex %
-        12
-      ) +
-      12
-    ) %
-    12;
-
-  const lastDay =
-    new Date(
-      Date.UTC(
-        targetYear,
-        normalizedMonthIndex +
-          1,
-        0,
-      ),
-    ).getUTCDate();
-
-  return new Date(
-    Date.UTC(
-      targetYear,
-      normalizedMonthIndex,
-      Math.min(
-        day,
-        lastDay,
-      ),
-    ),
-  )
-    .toISOString()
-    .slice(
-      0,
-      10,
-    );
-}
-
 function parsePositiveNumber(
   value: unknown,
 ): number | null {
@@ -776,10 +715,7 @@ export async function runDailyOpenBackfill({
   >
 > {
   const coverageStartDate =
-    shiftIsoMonths(
-      asOfDate,
-      -6,
-    );
+    `${asOfDate.slice(0, 4)}-01-01`;
 
   const coverageEndDate =
     shiftIsoDate(
@@ -889,10 +825,26 @@ export async function runDailyOpenBackfill({
               instrument.id,
             );
 
+          const requestTo =
+            progress
+              ?.coverage_start_date &&
+            progress
+              .coverage_start_date >
+              coverageStartDate
+              ? shiftIsoDate(
+                  progress
+                    .coverage_start_date,
+                  -1,
+                )
+              : coverageEndDate;
+
           return {
             instrument,
             source,
             progress,
+            requestFrom:
+              coverageStartDate,
+            requestTo,
           };
         },
       )
@@ -1094,9 +1046,9 @@ export async function runDailyOpenBackfill({
             apiKey:
               eodhdApiKey,
             from:
-              coverageStartDate,
+              candidate.requestFrom,
             to:
-              coverageEndDate,
+              candidate.requestTo,
             currency:
               candidate.instrument
                 .default_currency,
@@ -1118,9 +1070,9 @@ export async function runDailyOpenBackfill({
             apiKey:
               twelveDataApiKey,
             from:
-              coverageStartDate,
+              candidate.requestFrom,
             to:
-              coverageEndDate,
+              candidate.requestTo,
             expectedCurrency:
               candidate.instrument
                 .default_currency,

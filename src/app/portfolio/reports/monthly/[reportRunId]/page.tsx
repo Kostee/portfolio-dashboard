@@ -1286,6 +1286,10 @@ export default async function MonthlyReportDetailsPage({
                 points={
                     chartData.history.points
                 }
+                currentXirrRate={
+                    chartData.xirr.current
+                      ?.xirrRate ?? null
+                }
                 asOfDate={
                     report.asOfDate
                 }

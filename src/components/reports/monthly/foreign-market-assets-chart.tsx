@@ -147,7 +147,7 @@ export function ForeignMarketAssetsChart({
     string | null
   >(null);
 
-  const itemCount =
+  const instrumentCount =
     groups.reduce(
       (sum, group) =>
         sum +
@@ -369,10 +369,10 @@ export function ForeignMarketAssetsChart({
           >
             Global ETFs · U.S. REITs ·
             semiconductor stocks ·{" "}
-            {itemCount}{" "}
-            {itemCount === 1
-              ? "position"
-              : "positions"}
+            {instrumentCount}{" "}
+            {instrumentCount === 1
+              ? "unique instrument"
+              : "unique instruments"}
           </text>
 
           {ticks.map(

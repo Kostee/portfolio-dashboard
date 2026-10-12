@@ -15,6 +15,7 @@ import type {
 
 type PortfolioHistoryChartProps = {
   points: PortfolioHistoryPoint[];
+  currentXirrRate: number | null;
 
   asOfDate: string;
   revision: number;
@@ -63,6 +64,34 @@ function formatSignedAmount(
     value > 0 ? "+" : "";
 
   return `${prefix}${formatAmount(value)}`;
+}
+
+function formatSignedPercentage(
+  value: number,
+): string {
+  const percentage =
+    value * 100;
+
+  const formatted =
+    new Intl.NumberFormat(
+      "en-GB",
+      {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 2,
+      },
+    ).format(
+      Math.abs(percentage),
+    );
+
+  if (value > 0) {
+    return `+${formatted}%`;
+  }
+
+  if (value < 0) {
+    return `-${formatted}%`;
+  }
+
+  return `${formatted}%`;
 }
 
 function formatReportDate(
@@ -168,6 +197,7 @@ function buildDiamondPoints(
 
 export function PortfolioHistoryChart({
   points,
+  currentXirrRate,
   asOfDate,
   revision,
   baseCurrency,
@@ -895,6 +925,53 @@ export function PortfolioHistoryChart({
           >
             Value in {baseCurrency}
           </text>
+
+          {currentXirrRate !== null && (
+            <g>
+              <rect
+                x={CHART_WIDTH - 795}
+                y={CHART_HEIGHT - 92}
+                width={345}
+                height={58}
+                rx={12}
+                fill={
+                  currentXirrRate >= 0
+                    ? "#ecfdf5"
+                    : "#fff1f2"
+                }
+                stroke={
+                  currentXirrRate >= 0
+                    ? "#a7f3d0"
+                    : "#fecdd3"
+                }
+              />
+
+              <text
+                x={CHART_WIDTH - 770}
+                y={CHART_HEIGHT - 68}
+                fontSize={15}
+                fill="#64748b"
+              >
+                XIRR
+              </text>
+
+              <text
+                x={CHART_WIDTH - 770}
+                y={CHART_HEIGHT - 44}
+                fontSize={20}
+                fontWeight={700}
+                fill={
+                  currentXirrRate >= 0
+                    ? "#047857"
+                    : "#be123c"
+                }
+              >
+                {formatSignedPercentage(
+                  currentXirrRate,
+                )}
+              </text>
+            </g>
+          )}
 
           {latestPoint &&
             latestGain !== null && (

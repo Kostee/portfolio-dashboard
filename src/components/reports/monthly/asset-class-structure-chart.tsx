@@ -507,8 +507,8 @@ export function AssetClassStructureChart({
                   >
                     {item.itemCount}{" "}
                     {item.itemCount === 1
-                      ? "position"
-                      : "positions"}
+                      ? "unique instrument"
+                      : "unique instruments"}
                   </text>
 
                   <line

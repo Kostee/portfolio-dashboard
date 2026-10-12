@@ -718,11 +718,30 @@ function buildAssetClassChart(
       MutableAssetClassGroup
     >();
 
+  const instrumentIdsByGroup =
+    new Map<
+      string,
+      Set<string>
+    >();
+
   for (const item of items) {
     const key =
       item.asset_class_code ??
       item.asset_class_id ??
       "unclassified";
+
+    const instrumentIds =
+      instrumentIdsByGroup.get(key) ??
+      new Set<string>();
+
+    instrumentIds.add(
+      item.instrument_id,
+    );
+
+    instrumentIdsByGroup.set(
+      key,
+      instrumentIds,
+    );
 
     const existing =
       groups.get(key);
@@ -733,7 +752,8 @@ function buildAssetClassChart(
           item.market_value_base,
         );
 
-      existing.itemCount += 1;
+      existing.itemCount =
+        instrumentIds.size;
 
       continue;
     }
@@ -762,7 +782,8 @@ function buildAssetClassChart(
           item.market_value_base,
         ),
 
-      itemCount: 1,
+      itemCount:
+        instrumentIds.size,
     });
   }
 

@@ -367,8 +367,7 @@ export function ForeignMarketAssetsChart({
             fontSize={17}
             fill="#64748b"
           >
-            Global ETFs · U.S. REITs ·
-            semiconductor stocks ·{" "}
+            Global ETFs · semiconductor stocks ·{" "}
             {instrumentCount}{" "}
             {instrumentCount === 1
               ? "unique instrument"
